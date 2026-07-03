@@ -139,34 +139,57 @@ Authorization: Bearer <token>
 - 后台：`/admin/**`
 - 无权限页：`/403`
 
-## 后续阶段接口规划
+## 票务资源
 
-第三阶段：
+- `GET /api/admin/venues`
+- `POST /api/admin/venues`
+- `GET /api/admin/venues/{venueId}/areas`
+- `POST /api/admin/venues/{venueId}/seats/generate`
+- `GET /api/admin/sessions`
+- `GET /api/admin/sessions/{sessionId}/ticket-levels`
+- `GET /api/admin/sale-batches`
+- `POST /api/admin/sale-batches/{id}/init-redis-stock`
+- `GET /api/admin/stock-pool`
+- `GET /api/portal/performances/{performanceId}/sessions`
+- `GET /api/portal/sessions/{sessionId}/ticket-levels`
+- `GET /api/portal/sessions/{sessionId}/seats`
+- `GET /api/portal/sessions/{sessionId}/active-batch`
 
-- 场馆 CRUD
-- 区域 CRUD
-- 座位模板生成
-- 座位图查询
-- 场次、票档、售票批次管理
+Redis 库存 key：
 
-第四阶段：
+```text
+ticket:batch:{batchId}:level:{ticketLevelId}:stock
+```
 
-- 抢票请求提交
-- 抢票结果轮询
-- Redis 库存预扣
-- 锁座
-- 创建订单
-- 取消订单
-- 模拟支付
-- 出票
+## 抢票订单
 
-第五阶段：
+- `POST /api/rush/submit`
+- `GET /api/rush/{requestId}`
+- `GET /api/rush/{requestId}/result`
+- `POST /api/seats/lock`
+- `POST /api/seats/release`
+- `GET /api/seats/locks/{sessionId}`
+- `POST /api/orders/create`
+- `POST /api/orders/{id}/cancel`
+- `GET /api/user/orders`
+- `GET /api/user/orders/{id}`
+- `POST /api/payment/{orderId}/pay`
+- `GET /api/payment/{orderId}`
+- `GET /api/user/tickets`
+- `GET /api/user/tickets/{id}`
 
-- 退票申请
-- 退票审核
-- 回流票入池
-- 检票核验
-- 站内信
-- 统计报表
-- 操作日志
-- 风控日志
+## 运营核验
+
+- `POST /api/user/orders/{orderId}/refund`
+- `GET /api/user/refunds`
+- `GET /api/admin/refunds`
+- `POST /api/admin/refunds/{id}/approve`
+- `POST /api/admin/refunds/{id}/reject`
+- `POST /api/checker/tickets/verify`
+- `GET /api/checker/checkins`
+- `GET /api/admin/checkins`
+- `GET /api/user/messages`
+- `POST /api/user/messages/{id}/read`
+- `GET /api/admin/statistics/overview`
+- `GET /api/admin/operation-logs`
+- `GET /api/admin/risk-logs`

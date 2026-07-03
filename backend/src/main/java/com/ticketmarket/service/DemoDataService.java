@@ -157,9 +157,17 @@ public class DemoDataService {
         addDefaultUser(3L, "checker", "checker123", "检票员", "CHECKER", true);
         addDefaultUser(4L, "user01", "user123", "普通用户一", "USER", true);
         addDefaultUser(5L, "user02", "user123", "普通用户二", "USER", true);
+        addDefaultUser(6L, "user03", "user123", "普通用户三", "USER", true);
+        addDefaultUser(7L, "user04", "user123", "普通用户四", "USER", true);
+        addDefaultUser(8L, "user05", "user123", "普通用户五", "USER", true);
+        addDefaultUser(9L, "user06", "user123", "普通用户六", "USER", true);
+        addDefaultUser(10L, "user07", "user123", "普通用户七", "USER", true);
         Viewer viewer = new Viewer(1L, 4L, "林晓", "3301**********2245", "138****1024");
         viewer.setDefaultViewer(true);
         viewersByUser.put(4L, new ArrayList<>(List.of(viewer)));
+        Viewer demoViewer = new Viewer(2L, 6L, "周晴", "3301**********2246", "139****1234");
+        demoViewer.setDefaultViewer(true);
+        viewersByUser.put(6L, new ArrayList<>(List.of(demoViewer)));
     }
 
     private void addDefaultUser(Long id, String username, String password, String nickname, String roleCode, boolean verified) {

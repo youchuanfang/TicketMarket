@@ -3,6 +3,7 @@ package com.ticketmarket.service;
 import com.ticketmarket.common.ApiException;
 import com.ticketmarket.model.UserAccount;
 import com.ticketmarket.model.Viewer;
+import jakarta.annotation.PostConstruct;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -48,6 +49,66 @@ public class Phase4TicketFlowService {
         this.demoDataService = demoDataService;
         this.resourceService = resourceService;
         this.redisTemplate = redisTemplate;
+    }
+
+    @PostConstruct
+    public void initDemoRecords() {
+        Long id = orderId.incrementAndGet();
+        Map<String, Object> order = map(
+                "id", id,
+                "orderNo", "TM-DEMO-" + id,
+                "userId", 6L,
+                "sessionId", 1001L,
+                "batchId", 3001L,
+                "ticketLevelId", 2001L,
+                "ticketLevelName", "池座优选票",
+                "quantity", 1,
+                "viewerIds", List.of(2L),
+                "selectedSeatIds", List.of(),
+                "status", "TICKET_ISSUED",
+                "totalAmount", new BigDecimal("380"),
+                "expireTime", now(),
+                "createdAt", now(),
+                "updatedAt", now()
+        );
+        orders.put(id, order);
+        Long sampleTicketId = ticketId.incrementAndGet();
+        tickets.put(sampleTicketId, map(
+                "id", sampleTicketId,
+                "ticketNo", "ETDEMO" + sampleTicketId,
+                "qrCodeContent", "TICKETMARKET:ETDEMO" + sampleTicketId,
+                "orderId", id,
+                "userId", 6L,
+                "viewerId", 2L,
+                "sessionId", 1001L,
+                "ticketLevelId", 2001L,
+                "seatId", null,
+                "status", "UNUSED",
+                "createdAt", now()
+        ));
+        refunds.put(refundId.incrementAndGet(), map(
+                "id", refundId.get(),
+                "orderId", id,
+                "userId", 6L,
+                "amount", new BigDecimal("380"),
+                "feeRate", "0%",
+                "status", "APPLYING",
+                "message", "退票申请待审核",
+                "createdAt", now(),
+                "updatedAt", now()
+        ));
+        checkins.put(checkinId.incrementAndGet(), map(
+                "id", checkinId.get(),
+                "ticketId", sampleTicketId,
+                "ticketNo", "ETDEMO" + sampleTicketId,
+                "checkerId", 3L,
+                "result", "SUCCESS",
+                "message", "核验成功",
+                "createdAt", now()
+        ));
+        addMessage(6L, "出票成功", "演示订单已出票，可在票夹查看。");
+        log("演示数据", "初始化演示订单和电子票", 6L);
+        risk("风控", "演示风控日志，可用于后台查看", null);
     }
 
     public synchronized Map<String, Object> submitRush(Long userId, Map<String, Object> payload) {
