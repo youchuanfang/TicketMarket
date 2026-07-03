@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="420" viewBox="0 0 1440 420">
+<defs>
+  <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+    <stop offset="0" stop-color="#2b2d42"/>
+    <stop offset="0.55" stop-color="#ef476f"/>
+    <stop offset="1" stop-color="#06d6a0"/>
+  </linearGradient>
+</defs>
+<rect width="1440" height="420" fill="url(#bg)"/>
+<polygon points="720.0,0 115.2,420 345.59999999999997,420" fill="#ffd166" opacity="0.13"/>
+<polygon points="720.0,0 1094.4,420 1324.8,420" fill="#06d6a0" opacity="0.13"/>
+<circle cx="292" cy="188" r="28" fill="#ef476f" opacity="0.18"/>
+<circle cx="443" cy="271" r="41" fill="#ffd166" opacity="0.18"/>
+<circle cx="594" cy="354" r="54" fill="#06d6a0" opacity="0.18"/>
+<circle cx="745" cy="17" r="67" fill="#ef476f" opacity="0.18"/>
+<circle cx="896" cy="100" r="80" fill="#ffd166" opacity="0.18"/>
+<circle cx="1047" cy="183" r="93" fill="#06d6a0" opacity="0.18"/>
+<rect x="0.0" y="322" width="90.0" height="98" fill="#ffffff" opacity="0.12"/>
+<rect x="120.0" y="386" width="90.0" height="34" fill="#ffffff" opacity="0.12"/>
+<rect x="240.0" y="370" width="90.0" height="50" fill="#ffffff" opacity="0.12"/>
+<rect x="360.0" y="354" width="90.0" height="66" fill="#ffffff" opacity="0.12"/>
+<rect x="480.0" y="338" width="90.0" height="82" fill="#ffffff" opacity="0.12"/>
+<rect x="600.0" y="322" width="90.0" height="98" fill="#ffffff" opacity="0.12"/>
+<rect x="720.0" y="386" width="90.0" height="34" fill="#ffffff" opacity="0.12"/>
+<rect x="840.0" y="370" width="90.0" height="50" fill="#ffffff" opacity="0.12"/>
+<rect x="960.0" y="354" width="90.0" height="66" fill="#ffffff" opacity="0.12"/>
+<rect x="1080.0" y="338" width="90.0" height="82" fill="#ffffff" opacity="0.12"/>
+<rect x="1200.0" y="322" width="90.0" height="98" fill="#ffffff" opacity="0.12"/>
+<rect x="1320.0" y="386" width="90.0" height="34" fill="#ffffff" opacity="0.12"/>
+<rect x="86" y="72" width="620" height="230" rx="20" fill="#000000" opacity="0.18"/>
+<text x="118" y="148" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="54" font-weight="700" fill="#ffffff">星河音乐现场</text>
+<text x="120" y="204" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="24" font-weight="500" fill="#f7f0f2">灯光与旋律同步开场</text>
+<text x="120" y="260" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="26" font-weight="700" fill="#ffd166">TicketMarket · 深圳 · 08-18</text>
+<path d="M1030 112 C1110 70 1248 78 1320 146 C1256 142 1198 170 1156 216 C1110 178 1062 150 1030 112Z" fill="#ffffff" opacity="0.20"/>
+<circle cx="1130" cy="260" r="62" fill="#ffd166" opacity="0.86"/>
+<circle cx="1260" cy="238" r="92" fill="#ffffff" opacity="0.16"/>
+</svg>

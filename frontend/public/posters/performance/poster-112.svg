@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">
 <defs>
   <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-    <stop offset="0" stop-color="#143642"/>
-    <stop offset="0.62" stop-color="#d95d39"/>
+    <stop offset="0" stop-color="#1d2530"/>
+    <stop offset="0.62" stop-color="#e7374a"/>
     <stop offset="1" stop-color="#111827"/>
   </linearGradient>
 </defs>
 <rect width="600" height="800" fill="url(#bg)"/>
-<polygon points="300.0,0 48.0,800 144.0,800" fill="#f5b700" opacity="0.13"/>
-<polygon points="300.0,0 456.0,800 552.0,800" fill="#6fffe9" opacity="0.13"/>
-<circle cx="349" cy="611" r="28" fill="#d95d39" opacity="0.18"/>
-<circle cx="500" cy="694" r="41" fill="#f5b700" opacity="0.18"/>
-<circle cx="51" cy="777" r="54" fill="#6fffe9" opacity="0.18"/>
-<circle cx="202" cy="60" r="67" fill="#d95d39" opacity="0.18"/>
-<circle cx="353" cy="143" r="80" fill="#f5b700" opacity="0.18"/>
-<circle cx="504" cy="226" r="93" fill="#6fffe9" opacity="0.18"/>
+<polygon points="300.0,0 48.0,800 144.0,800" fill="#f6c85f" opacity="0.13"/>
+<polygon points="300.0,0 456.0,800 552.0,800" fill="#177e89" opacity="0.13"/>
+<circle cx="479" cy="281" r="28" fill="#e7374a" opacity="0.18"/>
+<circle cx="30" cy="364" r="41" fill="#f6c85f" opacity="0.18"/>
+<circle cx="181" cy="447" r="54" fill="#177e89" opacity="0.18"/>
+<circle cx="332" cy="530" r="67" fill="#e7374a" opacity="0.18"/>
+<circle cx="483" cy="613" r="80" fill="#f6c85f" opacity="0.18"/>
+<circle cx="34" cy="696" r="93" fill="#177e89" opacity="0.18"/>
 <rect x="0.0" y="718" width="37.5" height="82" fill="#ffffff" opacity="0.12"/>
 <rect x="50.0" y="702" width="37.5" height="98" fill="#ffffff" opacity="0.12"/>
 <rect x="100.0" y="766" width="37.5" height="34" fill="#ffffff" opacity="0.12"/>
@@ -28,12 +28,12 @@
 <rect x="500.0" y="718" width="37.5" height="82" fill="#ffffff" opacity="0.12"/>
 <rect x="550.0" y="702" width="37.5" height="98" fill="#ffffff" opacity="0.12"/>
 <rect x="44" y="54" width="512" height="692" rx="28" fill="#000" opacity="0.17"/>
-<circle cx="300" cy="284" r="128" fill="#f5b700" opacity="0.18"/>
+<circle cx="300" cy="284" r="128" fill="#f6c85f" opacity="0.18"/>
 <path d="M118 515 C205 458 309 455 388 515 C440 554 477 612 506 681 L94 681 C118 616 82 560 118 515Z" fill="#ffffff" opacity="0.16"/>
 <path d="M98 184 L502 126 L470 174 L132 226Z" fill="#ffffff" opacity="0.20"/>
-<text x="76" y="126" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="24" font-weight="800" fill="#f5b700">TicketMarket</text>
-<text x="76" y="610" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="40" font-weight="700" fill="#ffffff">城市剧场 夜航西窗</text>
-<text x="78" y="662" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="22" font-weight="500" fill="#f4f6fb">话剧 · 杭州 · 08-21</text>
-<rect x="76" y="696" width="186" height="38" rx="19" fill="#f5b700" opacity="0.94"/>
-<text x="169" y="722" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="18" font-weight="800" fill="#143642">本地原创素材</text>
+<text x="76" y="126" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="24" font-weight="800" fill="#f6c85f">TicketMarket</text>
+<text x="76" y="610" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="40" font-weight="700" fill="#ffffff">国风民乐新声音乐会</text>
+<text x="78" y="662" text-anchor="start" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="22" font-weight="500" fill="#f4f6fb">民乐 · 南京 · 09-09</text>
+<rect x="76" y="696" width="186" height="38" rx="19" fill="#f6c85f" opacity="0.94"/>
+<text x="169" y="722" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Arial" font-size="18" font-weight="800" fill="#1d2530">本地原创素材</text>
 </svg>
