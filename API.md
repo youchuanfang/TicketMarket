@@ -1,6 +1,6 @@
 # API 说明
 
-后端基础路径：`http://localhost:8080`。
+后端基础路径：`http://localhost:8080/api`。前端未配置 `VITE_API_BASE_URL` 时，会根据当前访问主机自动推导为 `协议://当前主机:8080/api`。
 
 统一返回格式：
 
@@ -29,8 +29,8 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "username": "user01",
-  "password": "user123"
+  "username": "普通用户账号",
+  "password": "本机演示密码"
 }
 ```
 
@@ -39,7 +39,7 @@ Authorization: Bearer <token>
 ```json
 {
   "username": "newuser",
-  "password": "user123",
+  "password": "自定义密码",
   "nickname": "新用户"
 }
 ```
@@ -97,7 +97,7 @@ Authorization: Bearer <token>
 
 `GET /api/portal/home`
 
-返回首页轮播图、分类、热门推荐、即将开售、正在售票、回流票、热门城市、热门场馆、电影。
+返回首页轮播图、分类、热门推荐、即将开售、正在售票、票量动态、热门城市、热门场馆、电影。
 
 `GET /api/portal/categories`
 
@@ -154,6 +154,7 @@ Authorization: Bearer <token>
 - `GET /api/portal/sessions/{sessionId}/ticket-levels`
 - `GET /api/portal/sessions/{sessionId}/seats`
 - `GET /api/portal/sessions/{sessionId}/active-batch`
+- `GET /api/portal/sessions/{sessionId}/sale-status`
 
 Redis 库存 key：
 
@@ -164,6 +165,7 @@ ticket:batch:{batchId}:level:{ticketLevelId}:stock
 ## 抢票订单
 
 - `POST /api/rush/submit`
+- `POST /api/reservations`
 - `GET /api/rush/{requestId}`
 - `GET /api/rush/{requestId}/result`
 - `POST /api/seats/lock`
@@ -177,6 +179,14 @@ ticket:batch:{batchId}:level:{ticketLevelId}:stock
 - `GET /api/payment/{orderId}`
 - `GET /api/user/tickets`
 - `GET /api/user/tickets/{id}`
+
+前台售卖状态：
+
+- `RESERVABLE`：未开售，可提交预约抢票，不下单、不扣库存、不锁座
+- `ON_SALE`：正在售卖，可提交抢票或进入选座
+- `SOLD_OUT`：缺货中，按钮禁用
+- `ENDED`：已结束
+- `UNAVAILABLE`：暂不可售
 
 ## 运营核验
 
