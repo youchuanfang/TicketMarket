@@ -10,6 +10,7 @@ import AdminDashboardView from '../views/AdminDashboardView.vue'
 import ViewersView from '../views/ViewersView.vue'
 import PlaceholderView from '../views/PlaceholderView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
+import SessionSeatView from '../views/SessionSeatView.vue'
 import { useUserStore } from '../stores/user'
 
 const router = createRouter({
@@ -20,7 +21,9 @@ const router = createRouter({
     { path: '/category/:code?', name: 'category', component: CategoryView },
     { path: '/search', name: 'search', component: SearchView },
     { path: '/performances/:id', alias: '/performance/:id', name: 'performance-detail', component: PerformanceDetailView },
+    { path: '/performance/:id/purchase', name: 'performance-purchase', component: PlaceholderView, meta: { requiresAuth: true, title: '购票选择', description: '请选择场次、票档和数量' } },
     { path: '/movies/:id', alias: '/movie/:id', name: 'movie-detail', component: MovieDetailView },
+    { path: '/session/:id/seats', name: 'session-seats', component: SessionSeatView },
     { path: '/login', name: 'login', component: LoginView },
     { path: '/403', name: 'forbidden', component: ForbiddenView },
     { path: '/user', name: 'user-center', component: UserCenterView, meta: { requiresAuth: true } },
@@ -30,12 +33,9 @@ const router = createRouter({
     { path: '/orders', name: 'orders', component: PlaceholderView, meta: { requiresAuth: true, title: '我的订单', description: '暂无订单' } },
     { path: '/tickets', name: 'tickets', component: PlaceholderView, meta: { requiresAuth: true, title: '我的票夹', description: '暂无电子票' } },
     { path: '/messages', name: 'messages', component: PlaceholderView, meta: { requiresAuth: true, title: '我的消息', description: '暂无消息' } },
-    {
-      path: '/admin/:section?',
-      name: 'admin-dashboard',
-      component: AdminDashboardView,
-      meta: { requiresAuth: true, requiresAdminEntry: true }
-    }
+    { path: '/admin/venue/:id/areas', name: 'admin-venue-areas', component: AdminDashboardView, meta: { requiresAuth: true, requiresAdminEntry: true } },
+    { path: '/admin/venue/:id/seats', name: 'admin-venue-seats', component: AdminDashboardView, meta: { requiresAuth: true, requiresAdminEntry: true } },
+    { path: '/admin/:section?', name: 'admin-dashboard', component: AdminDashboardView, meta: { requiresAuth: true, requiresAdminEntry: true } }
   ],
   scrollBehavior() {
     return { top: 0 }
@@ -48,7 +48,7 @@ router.beforeEach(async (to) => {
     try {
       await user.fetchMe()
     } catch {
-      // The response interceptor handles expired sessions.
+      // Expired sessions are handled by the HTTP layer.
     }
   }
 

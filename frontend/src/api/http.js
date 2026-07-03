@@ -19,7 +19,7 @@ http.interceptors.request.use((config) => {
 
 const normalizeError = (response) => {
   const body = response?.data || {}
-  const error = new Error(body.message || '请求失败')
+  const error = new Error(body.message || '请求失败，请稍后重试')
   error.code = body.code || response?.status
   error.status = response?.status
   return error
