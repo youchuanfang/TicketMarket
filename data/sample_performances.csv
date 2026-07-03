@@ -1,0 +1,9 @@
+title,category,city,venue,start_time,sale_mode,status,price_min,price_max
+星河回声巡回演唱会,演唱会,上海,滨江音乐中心,2026-08-18 19:30,AUTO_ALLOCATE,ON_SALE,380,1280
+城市剧场·夜航西窗,话剧歌剧,杭州,湖畔剧院,2026-08-21 19:00,SELECTABLE,ON_SALE,180,680
+仲夏室内乐精选,音乐会,南京,紫金艺术厅,2026-08-09 20:00,AREA_ONLY,COMING_SOON,120,520
+城市冠军杯篮球邀请赛,体育赛事,上海,云顶体育馆,2026-09-05 19:35,SELECTABLE,ON_SALE,99,599
+未来城市互动展,展览休闲,深圳,湾区会展中心,2026-07-25 10:00,STANDING,RETURNED,68,168
+童梦森林亲子剧,儿童亲子,杭州,湖畔剧院,2026-08-02 15:00,SELECTABLE,ON_SALE,80,320
+次元夏日嘉年华,二次元,南京,紫金展览馆,2026-08-30 09:30,STANDING,COMING_SOON,99,299
+海风音乐节双日通票,音乐节,深圳,湾区草坪剧场,2026-09-12 14:00,AUTO_ALLOCATE,LOCKED,399,899
