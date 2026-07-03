@@ -12,6 +12,7 @@ public class MovieCard {
     private String director;
     private String actors;
     private String summary;
+    private String rating;
     private List<SessionOption> sessions;
 
     public MovieCard() {
@@ -87,6 +88,14 @@ public class MovieCard {
 
     public void setSummary(String summary) {
         this.summary = summary;
+    }
+
+    public String getRating() {
+        return rating;
+    }
+
+    public void setRating(String rating) {
+        this.rating = rating;
     }
 
     public List<SessionOption> getSessions() {

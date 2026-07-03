@@ -10,6 +10,7 @@
           <span>{{ movie.genre }}</span>
           <span>{{ movie.releaseDate }} 上映</span>
           <span>{{ movie.durationMinutes }} 分钟</span>
+          <span v-if="movie.rating">评分 {{ movie.rating }}</span>
         </div>
         <p>导演：{{ movie.director }}</p>
         <p>主演：{{ movie.actors }}</p>
