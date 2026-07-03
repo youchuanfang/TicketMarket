@@ -42,11 +42,11 @@
         </div>
       </div>
       <div>
-        <SectionHeader title="少量回流 / 锁票提醒" to="/search?status=RETURNED" />
+        <SectionHeader title="票量动态" to="/search?status=RETURNED" />
         <div class="compact-list">
           <RouterLink v-for="item in home.returned" :key="item.id" :to="`/performances/${item.id}`" class="compact-item warning">
             <span>{{ item.title }}</span>
-            <strong>{{ item.saleStatus === 'LOCKED' ? '本轮已锁票' : '少量回流' }}</strong>
+            <strong>{{ item.saleStatus === 'LOCKED' ? '已结束' : '票量紧张' }}</strong>
           </RouterLink>
         </div>
       </div>

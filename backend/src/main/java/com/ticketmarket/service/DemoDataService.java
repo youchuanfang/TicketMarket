@@ -211,7 +211,7 @@ public class DemoDataService {
                 "主客队对抗与分区票档，适合体育赛事购票展示。"));
         performances.add(performance(105L, "未来城市互动展", "exhibition", "展览休闲", "深圳", "湾区会展中心",
                 "南山区科技南路 99 号", "2026-07-25 10:00", 68, 168, "STANDING", "RETURNED",
-                List.of("电子票", "少量回流", "无需选座"),
+                List.of("电子票", "票量紧张", "无需选座"),
                 "科技、建筑与数字艺术结合的展览项目。"));
         performances.add(performance(106L, "童梦森林亲子剧", "family", "儿童亲子", "杭州", "湖畔剧院",
                 "西湖区文艺路 16 号", "2026-08-02 15:00", 80, 320, "SELECTABLE", "ON_SALE",
@@ -223,8 +223,8 @@ public class DemoDataService {
                 "二次元主题活动，支持站席票档展示。"));
         performances.add(performance(108L, "海风音乐节双日通票", "festival", "音乐节", "深圳", "湾区草坪剧场",
                 "南山区滨海大道 188 号", "2026-09-12 14:00", 399, 899, "AUTO_ALLOCATE", "LOCKED",
-                List.of("锁票中", "不支持选座", "电子票"),
-                "双日音乐节通票项目，本轮售票已锁票。"));
+                List.of("暂不可售", "不支持选座", "电子票"),
+                "双日音乐节通票项目，后续票档开放安排请关注项目页。"));
     }
 
     private PerformanceCard performance(Long id, String title, String categoryCode, String categoryName, String city,

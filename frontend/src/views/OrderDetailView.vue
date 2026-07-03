@@ -8,6 +8,7 @@
       <p>金额：¥{{ order.totalAmount }}</p>
       <p>状态：{{ statusText(order.status) }}</p>
       <el-button v-if="order.status === 'PENDING_PAYMENT'" type="primary" @click="router.push(`/payment/${order.id}`)">继续支付</el-button>
+      <el-button v-if="order.status === 'PENDING_PAYMENT'" type="danger" plain @click="cancel">取消订单</el-button>
     </section>
   </div>
 </template>
@@ -15,8 +16,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import SectionHeader from '../components/SectionHeader.vue'
-import { getOrder } from '../api/ticketFlow'
+import { cancelOrder, getOrder } from '../api/ticketFlow'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,4 +28,9 @@ const statusText = (status) => ({ PENDING_PAYMENT: '待支付', PAID: '已支付
 onMounted(async () => {
   order.value = await getOrder(route.params.id)
 })
+
+const cancel = async () => {
+  order.value = await cancelOrder(order.value.id)
+  ElMessage.success('订单已取消')
+}
 </script>

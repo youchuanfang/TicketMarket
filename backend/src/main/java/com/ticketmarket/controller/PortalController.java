@@ -29,18 +29,18 @@ public class PortalController {
         List<PerformanceCard> all = dataService.performances();
         List<PerformanceCard> hot = all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(5).toList();
         List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(4).toList();
-        List<PerformanceCard> returned = all.stream().filter(item -> "RETURNED".equals(item.getSaleStatus()) || "LOCKED".equals(item.getSaleStatus())).limit(4).toList();
+        List<PerformanceCard> inventoryUpdates = all.stream().filter(item -> "RETURNED".equals(item.getSaleStatus()) || "LOCKED".equals(item.getSaleStatus())).limit(4).toList();
         return Result.ok(Map.of(
                 "banners", List.of(
                         Map.of("title", "夏日票务季", "subtitle", "演唱会、话剧、电影和展览一站式购票", "image", "/posters/performance/poster-101.svg", "targetId", 101),
                         Map.of("title", "剧院好座开放", "subtitle", "热门话剧支持按场次和票档浏览", "image", "/posters/performance/poster-102.svg", "targetId", 102),
-                        Map.of("title", "少量回流票提醒", "subtitle", "关注回流票动态，及时查看余票变化", "image", "/posters/performance/poster-105.svg", "targetId", 105)
+                        Map.of("title", "票量动态提醒", "subtitle", "关注热门项目状态，及时查看可购票档", "image", "/posters/performance/poster-105.svg", "targetId", 105)
                 ),
                 "categories", dataService.categories(),
                 "hot", hot,
                 "comingSoon", coming,
                 "onSale", hot,
-                "returned", returned,
+                "returned", inventoryUpdates,
                 "hotCities", List.of("上海", "杭州", "南京", "深圳"),
                 "hotVenues", List.of("滨江音乐中心", "湖畔剧院", "紫金艺术厅", "云顶体育馆"),
                 "movies", dataService.movies().stream().limit(5).toList()

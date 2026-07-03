@@ -16,6 +16,7 @@
           <template #default="{ row }">
             <RouterLink class="table-link" :to="`/orders/${row.id}`">详情</RouterLink>
             <RouterLink v-if="row.status === 'PENDING_PAYMENT'" class="table-link" :to="`/payment/${row.id}`">支付</RouterLink>
+            <el-button v-if="row.status === 'PENDING_PAYMENT'" link type="danger" @click="cancel(row)">取消订单</el-button>
             <el-button v-if="row.status === 'TICKET_ISSUED'" link type="warning" @click="refund(row)">退票</el-button>
           </template>
         </el-table-column>
@@ -28,7 +29,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import SectionHeader from '../components/SectionHeader.vue'
-import { getOrders } from '../api/ticketFlow'
+import { cancelOrder, getOrders } from '../api/ticketFlow'
 import { applyRefund } from '../api/operations'
 
 const orders = ref([])
@@ -41,6 +42,12 @@ onMounted(async () => {
 const refund = async (row) => {
   await applyRefund(row.id)
   ElMessage.success('退票申请已提交')
+  orders.value = await getOrders()
+}
+
+const cancel = async (row) => {
+  await cancelOrder(row.id)
+  ElMessage.success('订单已取消')
   orders.value = await getOrders()
 }
 </script>

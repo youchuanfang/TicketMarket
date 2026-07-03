@@ -210,6 +210,10 @@ public class Phase4TicketFlowService {
 
     public Map<String, Object> rushResult(String requestId, Long userId) {
         Map<String, Object> request = rushRequest(requestId, userId);
+        Long sessionId = longValue(request, "sessionId", null);
+        if (sessionId != null) {
+            request.put("performanceId", resourceService.session(sessionId).get("performanceId"));
+        }
         Object orderIdValue = request.get("orderId");
         if (orderIdValue != null) {
             request.put("order", order((Long) orderIdValue, userId));
@@ -305,7 +309,7 @@ public class Phase4TicketFlowService {
         }
         order.put("status", "CANCELLED");
         order.put("updatedAt", now());
-        redisTemplate.opsForValue().increment(stockKey((Long) order.get("batchId"), (Long) order.get("ticketLevelId")), intValue(order, "quantity", 1).longValue());
+        returnStock(order);
         resourceService.releaseSessionSeats(longList(order.get("selectedSeatIds")), userId);
         return copy(order);
     }
@@ -599,7 +603,7 @@ public class Phase4TicketFlowService {
     private void returnStock(Map<String, Object> order) {
         Map<String, Object> batch = resourceService.saleBatch((Long) order.get("batchId"));
         int quantity = intValue(order, "quantity", 1);
-        if ("SELLING".equals(batch.get("status"))) {
+        if ("ON_SALE".equals(resourceService.frontSaleStatus((Long) order.get("sessionId")).get("status"))) {
             redisTemplate.opsForValue().increment(stockKey((Long) order.get("batchId"), (Long) order.get("ticketLevelId")), quantity);
         } else {
             resourceService.addStockPool(map(
