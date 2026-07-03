@@ -3,6 +3,7 @@ package com.ticketmarket.common;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -38,9 +39,15 @@ public class GlobalExceptionHandler {
         return Result.fail(400, ex.getMessage());
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+        return Result.fail(400, "请求格式不正确，请检查后重试");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception ex) {
-        return Result.fail(500, "服务器内部错误：" + ex.getMessage());
+        return Result.fail(500, "服务暂时不可用，请稍后重试");
     }
 }

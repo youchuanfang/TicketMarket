@@ -2,6 +2,8 @@
 
 数据库名：`ticket_market`。初始化脚本位于 `data/schema.sql`。
 
+当前演示版本以内置数据和 Redis 库存为主，`data/schema.sql` 提供课程设计所需的持久化表结构；后续接入 MySQL 时可按本文表分组落库。
+
 ## 设计原则
 
 - 不使用 `order` 作为表名，订单表使用 `ticket_order`。
@@ -134,4 +136,3 @@
 - `SELLING`
 - `LOCKED`
 - `CLOSED`
-
