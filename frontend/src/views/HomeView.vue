@@ -6,7 +6,7 @@
           <RouterLink class="hero-slide" :to="`/performances/${banner.targetId}`">
             <img :src="banner.image" :alt="banner.title" />
             <div class="hero-copy">
-              <p class="eyebrow">TicketMarket 演示平台</p>
+              <p class="eyebrow">TicketMarket</p>
               <h1>{{ banner.title }}</h1>
               <p>{{ banner.subtitle }}</p>
             </div>

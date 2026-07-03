@@ -5,7 +5,7 @@
       <div class="detail-main">
         <p class="eyebrow">{{ detail.categoryName }} · {{ statusText }}</p>
         <h1>{{ detail.title }}</h1>
-        <p class="summary">{{ detail.summary }}</p>
+        <p class="summary">{{ detail.subtitle || detail.summary }}</p>
         <div class="detail-meta">
           <span><el-icon><Location /></el-icon>{{ detail.city }} · {{ detail.venue }}</span>
           <span><el-icon><Calendar /></el-icon>{{ detail.startTime }}</span>
@@ -57,12 +57,19 @@
 
     <section class="info-tabs">
       <el-tabs>
-        <el-tab-pane label="演出介绍"><p>{{ detail.intro }}</p></el-tab-pane>
-        <el-tab-pane label="艺人/演职人员"><p>{{ detail.artistInfo }}</p></el-tab-pane>
-        <el-tab-pane label="场馆介绍"><p>{{ detail.venueIntro }}</p></el-tab-pane>
-        <el-tab-pane label="购票须知"><p>{{ detail.purchaseNotice }}</p></el-tab-pane>
-        <el-tab-pane label="退票规则"><p>{{ detail.refundRule }}</p></el-tab-pane>
-        <el-tab-pane label="入场规则"><p>{{ detail.entryRule }}</p></el-tab-pane>
+        <el-tab-pane label="项目详情">
+          <div class="rich-detail">
+            <img v-if="detail.detailImage" :src="detail.detailImage" :alt="detail.title" />
+            <h2>项目介绍</h2>
+            <p>{{ detail.intro }}</p>
+            <h2>演职人员</h2>
+            <p>{{ detail.artistInfo }}</p>
+            <h2>场馆介绍</h2>
+            <p>{{ detail.venueIntro }}</p>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="购票须知"><p>{{ detail.purchaseNotice }}</p><p>{{ detail.refundRule }}</p></el-tab-pane>
+        <el-tab-pane label="观演须知"><p>{{ detail.entryRule }}</p></el-tab-pane>
       </el-tabs>
     </section>
   </div>
