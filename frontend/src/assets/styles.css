@@ -1294,3 +1294,122 @@ button {
     flex-direction: column;
   }
 }
+
+@media (max-width: 768px) {
+  .topbar {
+    position: static;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+
+  .brand {
+    font-size: 20px;
+  }
+
+  .nav-links,
+  .top-actions,
+  .city-switch {
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .global-search {
+    max-width: none;
+    width: 100%;
+  }
+
+  .page,
+  .page.narrow {
+    width: min(100% - 24px, 100%);
+    padding: 16px 0 42px;
+  }
+
+  .hero-band {
+    margin-top: 8px;
+  }
+
+  .hero-slide {
+    height: 220px;
+  }
+
+  .hero-copy {
+    padding: 28px 22px;
+  }
+
+  .hero-copy h1,
+  .detail-main h1,
+  .auth-copy h1 {
+    font-size: 26px;
+  }
+
+  .category-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .category-chip {
+    min-height: 56px;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .event-grid,
+  .movie-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .event-card {
+    min-height: 0;
+  }
+
+  .event-body h3 {
+    min-height: auto;
+    font-size: 15px;
+  }
+
+  .detail-poster {
+    max-width: 260px;
+    margin: 0 auto;
+  }
+
+  .detail-main,
+  .buy-panel,
+  .info-tabs,
+  .detail-section,
+  .flow-panel,
+  .list-panel,
+  .detail-card,
+  .ticket-detail {
+    padding: 16px;
+  }
+
+  .buy-panel {
+    position: static;
+  }
+
+  .flow-aside strong {
+    font-size: 22px;
+  }
+
+  .list-panel {
+    overflow-x: auto;
+  }
+
+  .seat-purchase-layout {
+    gap: 14px;
+  }
+
+  .seat-purchase-main {
+    overflow-x: auto;
+  }
+
+  .seat-map {
+    min-width: 720px;
+    min-height: 430px;
+  }
+
+  .seat-summary {
+    padding: 16px;
+  }
+}

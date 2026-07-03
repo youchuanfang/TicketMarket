@@ -30,7 +30,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             String username = String.valueOf(claims.get("username"));
             String role = String.valueOf(claims.get("role"));
             AuthContext.set(new AuthContext.AuthUser(Long.valueOf(claims.getSubject()), username, role));
-            checkPermission(request.getRequestURI(), role);
+            checkPermission(request, role);
             return true;
         } catch (Exception ex) {
             if (ex instanceof ApiException apiException) {
@@ -40,7 +40,11 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
     }
 
-    private void checkPermission(String uri, String role) {
+    private void checkPermission(HttpServletRequest request, String role) {
+        String uri = request.getRequestURI();
+        if ((uri.startsWith("/api/admin/") || uri.startsWith("/api/checker/")) && !isLocalRequest(request)) {
+            throw new ApiException(403, "后台账号仅允许在服务器本机登录");
+        }
         if (uri.startsWith("/api/admin/") && !hasAnyRole(role, "ADMIN", "MANAGER")) {
             throw new ApiException(403, "无权限访问后台");
         }
@@ -56,6 +60,11 @@ public class AuthInterceptor implements HandlerInterceptor {
             }
         }
         return false;
+    }
+
+    private boolean isLocalRequest(HttpServletRequest request) {
+        String host = request.getServerName();
+        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host) || "[::1]".equals(host);
     }
 
     @Override

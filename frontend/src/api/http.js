@@ -1,15 +1,20 @@
 import axios from 'axios'
 
-const fallbackBaseUrl = `${window.location.protocol}//${window.location.hostname}:8080`
+const fallbackBaseUrl = `${window.location.protocol}//${window.location.hostname}:8080/api`
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || fallbackBaseUrl
+const baseUrlIncludesApi = apiBaseUrl.replace(/\/$/, '').endsWith('/api')
 const tokenKey = 'ticket-market-token'
 const userKey = 'ticket-market-user'
 
 export const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || fallbackBaseUrl,
+  baseURL: apiBaseUrl,
   timeout: 10000
 })
 
 http.interceptors.request.use((config) => {
+  if (baseUrlIncludesApi && typeof config.url === 'string' && config.url.startsWith('/api/')) {
+    config.url = config.url.slice('/api'.length)
+  }
   const token = localStorage.getItem(tokenKey)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
