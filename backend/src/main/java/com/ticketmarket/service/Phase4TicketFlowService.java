@@ -34,6 +34,7 @@ public class Phase4TicketFlowService {
     private final AtomicLong messageId = new AtomicLong(12000);
     private final AtomicLong logId = new AtomicLong(13000);
     private final AtomicLong riskId = new AtomicLong(14000);
+    private final AtomicLong reservationId = new AtomicLong(15000);
     private final Map<String, Map<String, Object>> rushRequests = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> orders = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> payments = new ConcurrentHashMap<>();
@@ -44,6 +45,7 @@ public class Phase4TicketFlowService {
     private final Map<Long, Map<String, Object>> operationLogs = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> riskLogs = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> blacklist = new ConcurrentHashMap<>();
+    private final Map<Long, Map<String, Object>> reservations = new ConcurrentHashMap<>();
 
     public Phase4TicketFlowService(DemoDataService demoDataService, Phase3ResourceService resourceService, StringRedisTemplate redisTemplate) {
         this.demoDataService = demoDataService;
@@ -123,10 +125,12 @@ public class Phase4TicketFlowService {
             return failedRush(userId, payload, "FAILED", "请选择场次、票档和数量");
         }
         Map<String, Object> batch = resolveBatch(sessionId, longValue(payload, "batchId", null));
-        String batchStatus = String.valueOf(batch.get("status"));
-        if ("NOT_STARTED".equals(batchStatus)) {
-            return failedRush(userId, payload, "NOT_STARTED", "本轮售票尚未开始");
+        try {
+            resourceService.assertFrontSaleOpen(sessionId, (Long) batch.get("id"));
+        } catch (ApiException ex) {
+            return failedRush(userId, payload, "NOT_STARTED", "当前场次暂未开放购票，可先预约抢票");
         }
+        String batchStatus = String.valueOf(batch.get("status"));
         if (!"SELLING".equals(batchStatus)) {
             return failedRush(userId, payload, "LOCKED", "本轮售票已锁票");
         }
@@ -219,6 +223,50 @@ public class Phase4TicketFlowService {
             throw new ApiException(409, String.valueOf(request.get("message")));
         }
         return order((Long) request.get("orderId"), userId);
+    }
+
+    public synchronized Map<String, Object> createReservation(Long userId, Map<String, Object> payload) {
+        Long sessionId = longValue(payload, "sessionId", null);
+        Long ticketLevelId = longValue(payload, "ticketLevelId", null);
+        Integer quantity = intValue(payload, "quantity", 1);
+        if (sessionId == null || ticketLevelId == null || quantity == null || quantity < 1) {
+            throw new ApiException(400, "请选择场次、票档和数量");
+        }
+        Map<String, Object> level = resourceService.ticketLevel(ticketLevelId);
+        if (!Objects.equals(level.get("sessionId"), sessionId)) {
+            throw new ApiException(400, "票档与场次不匹配，请重新选择");
+        }
+        List<Long> viewerIds = longList(payload.get("viewerIds"));
+        if (viewerIds.size() != quantity) {
+            throw new ApiException(400, "请选择对应数量的观演人");
+        }
+        List<Viewer> viewers = demoDataService.listViewers(userId);
+        boolean invalidViewer = viewerIds.stream().anyMatch(id -> viewers.stream().noneMatch(viewer -> Objects.equals(viewer.getId(), id)));
+        if (invalidViewer) {
+            throw new ApiException(400, "观演人信息不可用，请重新选择");
+        }
+        Map<String, Object> status = resourceService.frontSaleStatus(sessionId);
+        if ("ON_SALE".equals(status.get("status"))) {
+            throw new ApiException(409, "当前场次已开售，请直接购票");
+        }
+        Long id = reservationId.incrementAndGet();
+        Map<String, Object> reservation = map(
+                "id", id,
+                "userId", userId,
+                "sessionId", sessionId,
+                "batchId", status.get("batchId"),
+                "ticketLevelId", ticketLevelId,
+                "ticketLevelName", level.get("name"),
+                "quantity", quantity,
+                "viewerIds", new ArrayList<>(viewerIds),
+                "status", "RESERVED",
+                "createdAt", now(),
+                "updatedAt", now()
+        );
+        reservations.put(id, reservation);
+        addMessage(userId, "预约抢票已提交", "开售前我们会保留你的预约信息，请在开售后回到项目页完成购票。");
+        log("预约抢票", "用户提交预约提醒，场次：" + sessionId, userId);
+        return copy(reservation);
     }
 
     public List<Map<String, Object>> userOrders(Long userId) {
@@ -523,6 +571,7 @@ public class Phase4TicketFlowService {
             throw new ApiException(400, "请选择要锁定的座位");
         }
         Map<String, Object> batch = resolveBatch(sessionId, longValue(payload, "batchId", null));
+        resourceService.assertSeatSelectionOpen(sessionId, (Long) batch.get("id"));
         return map("seats", resourceService.lockSessionSeats(sessionId, seatIds, userId, (Long) batch.get("id"), 5), "lockExpireTime", FORMATTER.format(LocalDateTime.now().plusMinutes(5)));
     }
 

@@ -1,6 +1,7 @@
 import { http } from './http'
 
 export const submitRush = (payload) => http.post('/api/rush/submit', payload)
+export const createReservation = (payload) => http.post('/api/reservations', payload)
 export const getRush = (requestId) => http.get(`/api/rush/${requestId}`)
 export const getRushResult = (requestId) => http.get(`/api/rush/${requestId}/result`)
 export const createOrder = (payload) => http.post('/api/orders/create', payload)

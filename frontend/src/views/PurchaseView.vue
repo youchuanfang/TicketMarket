@@ -28,9 +28,9 @@
       <aside class="flow-aside">
         <p>购票模式</p>
         <strong>{{ modeText }}</strong>
-        <p>当前批次</p>
-        <strong>{{ batch?.batchName || '暂无可售批次' }}</strong>
-        <el-button type="primary" size="large" :loading="submitting" @click="submit">提交抢票</el-button>
+        <p>售卖状态</p>
+        <strong>{{ saleStatusText }}</strong>
+        <el-button type="primary" size="large" :disabled="saleStatus.status === 'SOLD_OUT' || saleStatus.status === 'ENDED'" :loading="submitting" @click="submit">{{ submitText }}</el-button>
         <el-button v-if="selectedSession?.purchaseMode === 'SELECTABLE'" plain @click="goSeat">前往选座</el-button>
       </aside>
     </section>
@@ -42,9 +42,9 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SectionHeader from '../components/SectionHeader.vue'
-import { getActiveBatch, getPerformance, getPerformanceSessions, getSessionTicketLevels } from '../api/portal'
+import { getActiveBatch, getPerformance, getPerformanceSessions, getSessionSaleStatus, getSessionTicketLevels } from '../api/portal'
 import { getViewers } from '../api/auth'
-import { submitRush } from '../api/ticketFlow'
+import { createReservation, submitRush } from '../api/ticketFlow'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,6 +53,7 @@ const sessions = ref([])
 const ticketLevels = ref([])
 const viewers = ref([])
 const batch = ref(null)
+const saleStatus = ref({})
 const submitting = ref(false)
 const form = reactive({ sessionId: null, ticketLevelId: null, quantity: 1, viewerIds: [] })
 
@@ -63,10 +64,23 @@ const modeText = computed(() => ({
   AREA_ONLY: '按区域购票',
   STANDING: '站席购票'
 }[selectedSession.value?.purchaseMode] || '请选择场次'))
+const saleStatusText = computed(() => ({
+  RESERVABLE: '即将开售，可先预约',
+  ON_SALE: '正在售卖',
+  SOLD_OUT: '缺货中',
+  ENDED: '已结束',
+  UNAVAILABLE: '暂不可售'
+}[saleStatus.value.status] || '请选择场次'))
+const submitText = computed(() => saleStatus.value.status === 'ON_SALE' ? '提交抢票' : '提交预约')
 
 const loadLevels = async () => {
   if (!form.sessionId) return
-  ticketLevels.value = await getSessionTicketLevels(form.sessionId)
+  const [levels, status] = await Promise.all([
+    getSessionTicketLevels(form.sessionId),
+    getSessionSaleStatus(form.sessionId)
+  ])
+  ticketLevels.value = levels
+  saleStatus.value = status
   form.ticketLevelId = ticketLevels.value[0]?.id || null
   batch.value = await getActiveBatch(form.sessionId)
 }
@@ -82,8 +96,14 @@ const submit = async () => {
   }
   submitting.value = true
   try {
-    const request = await submitRush({ ...form, batchId: batch.value?.id })
-    router.push(`/rush/queue/${request.requestId}`)
+    if (saleStatus.value.status === 'ON_SALE') {
+      const request = await submitRush({ ...form, batchId: batch.value?.batchId || batch.value?.id })
+      router.push(`/rush/queue/${request.requestId}`)
+    } else {
+      await createReservation({ ...form, batchId: batch.value?.batchId || batch.value?.id })
+      ElMessage.success('预约抢票已提交')
+      router.push(`/performances/${performance.value.id}`)
+    }
   } finally {
     submitting.value = false
   }
@@ -94,6 +114,10 @@ const goSeat = () => {
     ElMessage.warning('请先选择场次')
     return
   }
+  if (saleStatus.value.status !== 'ON_SALE') {
+    ElMessage.warning('当前场次暂未开放选座，可先预约抢票')
+    return
+  }
   router.push(`/session/${form.sessionId}/seats`)
 }
 
@@ -101,7 +125,7 @@ onMounted(async () => {
   performance.value = await getPerformance(route.params.id)
   sessions.value = await getPerformanceSessions(route.params.id)
   viewers.value = await getViewers()
-  form.sessionId = sessions.value[0]?.id || null
+  form.sessionId = Number(route.query.sessionId) || sessions.value[0]?.id || null
   form.viewerIds = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id)
   await loadLevels()
 })

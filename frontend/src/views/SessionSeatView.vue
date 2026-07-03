@@ -119,10 +119,15 @@ const submit = async () => {
 }
 
 onMounted(async () => {
-  seats.value = await getSessionSeats(route.params.id)
-  ticketLevels.value = await getSessionTicketLevels(route.params.id)
-  viewers.value = await getViewers()
-  viewerIds.value = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id)
-  batch.value = await getActiveBatch(route.params.id)
+  try {
+    seats.value = await getSessionSeats(route.params.id)
+    ticketLevels.value = await getSessionTicketLevels(route.params.id)
+    viewers.value = await getViewers()
+    viewerIds.value = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id)
+    batch.value = await getActiveBatch(route.params.id)
+  } catch (error) {
+    ElMessage.warning(error.message || '当前场次暂未开放选座，可先预约抢票')
+    router.back()
+  }
 })
 </script>

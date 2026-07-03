@@ -31,16 +31,22 @@ public class Phase3PortalController {
 
     @GetMapping("/sessions/{sessionId}/ticket-levels")
     public Result<List<Map<String, Object>>> ticketLevels(@PathVariable Long sessionId) {
-        return Result.ok(service.ticketLevels(sessionId));
+        return Result.ok(service.frontTicketLevels(sessionId));
     }
 
     @GetMapping("/sessions/{sessionId}/seats")
     public Result<List<Map<String, Object>>> sessionSeats(@PathVariable Long sessionId) {
+        service.assertSeatSelectionOpen(sessionId, null);
         return Result.ok(service.sessionSeats(sessionId));
     }
 
     @GetMapping("/sessions/{sessionId}/active-batch")
     public Result<Map<String, Object>> activeBatch(@PathVariable Long sessionId) {
         return Result.ok(service.activeBatch(sessionId));
+    }
+
+    @GetMapping("/sessions/{sessionId}/sale-status")
+    public Result<Map<String, Object>> saleStatus(@PathVariable Long sessionId) {
+        return Result.ok(service.frontSaleStatus(sessionId));
     }
 }

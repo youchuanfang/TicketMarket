@@ -9,3 +9,4 @@ export const getPerformanceSessions = (performanceId) => http.get(`/api/portal/p
 export const getSessionTicketLevels = (sessionId) => http.get(`/api/portal/sessions/${sessionId}/ticket-levels`)
 export const getSessionSeats = (sessionId) => http.get(`/api/portal/sessions/${sessionId}/seats`)
 export const getActiveBatch = (sessionId) => http.get(`/api/portal/sessions/${sessionId}/active-batch`)
+export const getSessionSaleStatus = (sessionId) => http.get(`/api/portal/sessions/${sessionId}/sale-status`)
