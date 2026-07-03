@@ -193,46 +193,57 @@ public class DemoDataService {
     }
 
     private void seedPerformances() {
-        performances.add(performance(101L, "星河回声巡回演唱会", "concert", "演唱会", "上海", "滨江音乐中心",
+        performances.add(performance(101L, "星河回声巡回演唱会", "光束、合唱与城市夜景交织的声浪现场", "concert", "演唱会", "上海", "滨江音乐中心",
                 "浦东新区临江大道 88 号", "2026-08-18 19:30", 380, 1280, "AUTO_ALLOCATE", "ON_SALE",
-                List.of("实名制", "电子票", "限购2张", "不支持选座"),
-                "沉浸式声光舞台与热门曲目串联，适合热门演唱会购票。"));
-        performances.add(performance(102L, "城市剧场·夜航西窗", "drama", "话剧歌剧", "杭州", "湖畔剧院",
+                List.of("实名制", "电子票", "限购2张", "自动配座")));
+        performances.add(performance(102L, "城市剧场·夜航西窗", "一封夜班列车上的来信，引出城市边缘的温柔谜题", "drama", "话剧歌剧", "杭州", "湖畔剧院",
                 "西湖区文艺路 16 号", "2026-08-21 19:00", 180, 680, "SELECTABLE", "ON_SALE",
-                List.of("实名制", "支持选座", "条件退", "电子票"),
-                "小剧场悬疑话剧，支持按场次和票档浏览。"));
-        performances.add(performance(103L, "仲夏室内乐精选", "music", "音乐会", "南京", "紫金艺术厅",
+                List.of("实名制", "支持选座", "条件退", "电子票")));
+        performances.add(performance(103L, "仲夏室内乐精选", "弦乐、木管与钢琴在小厅中展开清澈对话", "music", "音乐会", "南京", "紫金艺术厅",
                 "玄武区中央路 201 号", "2026-08-09 20:00", 120, 520, "AREA_ONLY", "COMING_SOON",
-                List.of("实名制", "区域购票", "电子票"),
-                "古典室内乐精选曲目，适合预约开售提醒。"));
-        performances.add(performance(104L, "城市冠军杯篮球邀请赛", "sports", "体育赛事", "上海", "云顶体育馆",
-                "闵行区体育公园 6 号", "2026-09-05 19:35", 99, 599, "SELECTABLE", "ON_SALE",
-                List.of("支持选座", "电子票", "限购4张"),
-                "主客队对抗与分区票档，适合体育赛事购票展示。"));
-        performances.add(performance(105L, "未来城市互动展", "exhibition", "展览休闲", "深圳", "湾区会展中心",
-                "南山区科技南路 99 号", "2026-07-25 10:00", 68, 168, "STANDING", "RETURNED",
-                List.of("电子票", "少量回流", "无需选座"),
-                "科技、建筑与数字艺术结合的展览项目。"));
-        performances.add(performance(106L, "童梦森林亲子剧", "family", "儿童亲子", "杭州", "湖畔剧院",
-                "西湖区文艺路 16 号", "2026-08-02 15:00", 80, 320, "SELECTABLE", "ON_SALE",
-                List.of("支持选座", "亲子套票", "条件退"),
-                "适合家庭观演的轻量票务场景。"));
-        performances.add(performance(107L, "次元夏日嘉年华", "anime", "二次元", "南京", "紫金展览馆",
+                List.of("实名制", "区域购票", "电子票", "开售提醒")));
+        performances.add(performance(104L, "次元夏日嘉年华", "原创角色巡游、舞台互动与主题市集集合", "anime", "二次元", "南京", "紫金展览馆",
                 "建邺区江东中路 300 号", "2026-08-30 09:30", 99, 299, "STANDING", "COMING_SOON",
-                List.of("站席", "电子票", "开售提醒"),
-                "二次元主题活动，支持站席票档展示。"));
-        performances.add(performance(108L, "海风音乐节双日通票", "festival", "音乐节", "深圳", "湾区草坪剧场",
+                List.of("站席", "电子票", "开售提醒", "限购4张")));
+        performances.add(performance(105L, "海风音乐节双日通票", "两日草坪舞台、落日合唱与海岸灯带", "festival", "音乐节", "深圳", "湾区草坪剧场",
                 "南山区滨海大道 188 号", "2026-09-12 14:00", 399, 899, "AUTO_ALLOCATE", "LOCKED",
-                List.of("锁票中", "不支持选座", "电子票"),
-                "双日音乐节通票项目，本轮售票已锁票。"));
+                List.of("暂不可售", "不支持选座", "电子票", "双日通票")));
+        performances.add(performance(106L, "未来城市互动展", "用影像、装置和触控墙拼接下一站城市想象", "exhibition", "展览休闲", "深圳", "湾区会展中心",
+                "南山区科技南路 99 号", "2026-07-25 10:00", 68, 168, "STANDING", "RETURNED",
+                List.of("电子票", "票量紧张", "无需选座", "分时入场")));
+        performances.add(performance(107L, "亲子幻想剧场", "纸船、星灯与森林伙伴组成的轻喜剧", "family", "儿童亲子", "杭州", "湖畔剧院",
+                "西湖区文艺路 16 号", "2026-08-02 15:00", 80, 320, "SELECTABLE", "ON_SALE",
+                List.of("支持选座", "亲子套票", "条件退", "电子票")));
+        performances.add(performance(108L, "热血篮球挑战赛", "城市队伍邀请赛，近距离感受攻防节奏", "sports", "体育赛事", "上海", "云顶体育馆",
+                "闵行区体育公园 6 号", "2026-09-05 19:35", 99, 599, "SELECTABLE", "ON_SALE",
+                List.of("支持选座", "电子票", "限购4张", "分区入场")));
+        performances.add(performance(109L, "光影沉浸艺术展", "流动影像、镜面空间与城市声景共同构成展线", "exhibition", "展览休闲", "深圳", "南山艺文仓",
+                "南山区艺文路 28 号", "2026-09-18 10:00", 88, 228, "STANDING", "ON_SALE",
+                List.of("电子票", "分时入场", "无需选座", "条件退")));
+        performances.add(performance(110L, "周末脱口秀专场", "三组虚构喜剧演员带来轻松犀利的城市观察", "quyi", "曲苑杂坛", "上海", "梧桐小剧场",
+                "徐汇区梧桐路 36 号", "2026-08-16 20:00", 120, 360, "AREA_ONLY", "ON_SALE",
+                List.of("实名制", "区域购票", "电子票", "限购2张")));
+        performances.add(performance(111L, "古典芭蕾精选夜", "以原创舞段串联湖畔、月光与晨雾三幕", "dance", "舞蹈芭蕾", "杭州", "镜湖大剧院",
+                "拱墅区镜湖路 66 号", "2026-09-02 19:30", 180, 880, "SELECTABLE", "COMING_SOON",
+                List.of("支持选座", "实名制", "电子票", "开售提醒")));
+        performances.add(performance(112L, "国风民乐新声音乐会", "笛、阮、笙与电子氛围织成新民乐夜场", "music", "音乐会", "南京", "青砖音乐厅",
+                "秦淮区青砖巷 12 号", "2026-09-09 19:30", 160, 680, "AUTO_ALLOCATE", "COMING_SOON",
+                List.of("实名制", "电子票", "自动配座", "开售提醒")));
     }
 
     private PerformanceCard performance(Long id, String title, String categoryCode, String categoryName, String city,
                                         String venue, String address, String startTime, int priceMin, int priceMax,
                                         String saleMode, String status, List<String> tags, String summary) {
+        return performance(id, title, summary, categoryCode, categoryName, city, venue, address, startTime, priceMin, priceMax, saleMode, status, tags);
+    }
+
+    private PerformanceCard performance(Long id, String title, String subtitle, String categoryCode, String categoryName, String city,
+                                        String venue, String address, String startTime, int priceMin, int priceMax,
+                                        String saleMode, String status, List<String> tags) {
         PerformanceCard card = new PerformanceCard();
         card.setId(id);
         card.setTitle(title);
+        card.setSubtitle(subtitle);
         card.setCategoryCode(categoryCode);
         card.setCategoryName(categoryName);
         card.setCity(city);
@@ -241,17 +252,19 @@ public class DemoDataService {
         card.setStartTime(startTime);
         card.setPriceMin(priceMin);
         card.setPriceMax(priceMax);
-        card.setPoster("/posters/performance/poster-" + id + ".svg");
+        card.setPoster("/uploads/posters/performance/poster-" + id + ".svg");
+        card.setBanner("/uploads/banners/banner-" + String.format("%02d", ((id.intValue() - 101) % 6) + 1) + ".svg");
+        card.setDetailImage("/uploads/detail/detail-" + String.format("%02d", ((id.intValue() - 101) % 8) + 1) + ".svg");
         card.setSaleStatus(status);
         card.setSaleMode(saleMode);
         card.setTags(tags);
-        card.setSummary(summary);
-        card.setIntro(summary + " 平台提供场次、票档、电子票和入场规则等完整票务信息。");
-        card.setArtistInfo("演职人员信息以主办方发布内容为准，具体阵容请关注平台公告。");
-        card.setVenueIntro(venue + " 交通便利，场馆内设置清晰的分区指引和入场通道。");
-        card.setPurchaseNotice("请先登录并完成实名信息；每个账号和身份证按售票批次限购。");
-        card.setRefundRule("演出开始 72 小时前可退，24-72 小时收取 20% 手续费，24 小时内不可退。");
-        card.setEntryRule("电子票核验通过后入场，已退票、已核验或非当前场次票不可入场。");
+        card.setSummary(subtitle);
+        card.setIntro(title + "围绕“" + subtitle + "”展开，节目以清晰的段落、稳定的现场调度和富有层次的灯光声场组织观演体验。项目内容、人员与场馆均为 TicketMarket 本地虚构数据，用于展示正式票务平台中项目介绍、场次选择、票档展示和入场须知的完整链路。");
+        card.setArtistInfo("本项目由创作团队“城市回声工作室”联合多位青年演职人员完成，阵容包含舞台统筹、声音设计、视觉导演与现场执行团队。演职人员姓名、团队履历和节目介绍均为本地原创虚构内容。");
+        card.setVenueIntro(venue + "位于" + address + "，设有清晰的入口、休息区和分区导视。观众可根据票面信息提前规划交通，建议预留安检、取票或电子票核验时间，现场以项目页和站内通知公布的指引为准。");
+        card.setPurchaseNotice("购票前请确认场次、票档、数量和观演人信息。电子票将在订单支付完成后生成，同一账号同一场次按项目规则限购；儿童、陪同人员及特殊入场要求请以本页说明和现场公告为准。");
+        card.setRefundRule("本项目支持条件退票：距开场 72 小时以上可申请退票，距开场 24 至 72 小时内按订单金额收取服务费，距开场不足 24 小时或票券已核验后不支持退票。");
+        card.setEntryRule("请携带购票账号对应的有效身份证件或电子票二维码入场。入场时需通过票券核验，已退票、已核验、非本场次或截图异常票券不可入场；迟到观众请听从现场工作人员安排。");
         card.setSessions(List.of(
                 new SessionOption(id * 10 + 1, startTime, "2026-07-20 10:00", "2026-08-01 18:00", "主厅", saleMode),
                 new SessionOption(id * 10 + 2, startTime.replace("19:30", "14:30").replace("19:00", "14:30"), "2026-07-27 10:00", "2026-08-02 18:00", "加场厅", saleMode)
@@ -265,14 +278,21 @@ public class DemoDataService {
     }
 
     private void seedMovies() {
-        movies.add(movie(201L, "深空旅人", "科幻/冒险", "2026-07-18", 128, "陈一川", "周宁、许知夏"));
-        movies.add(movie(202L, "夏日邮局", "剧情/爱情", "2026-07-26", 112, "林青禾", "赵予安、梁辰"));
-        movies.add(movie(203L, "山海小队", "动画/家庭", "2026-08-01", 96, "韩砚", "配音：白露、沈朗"));
-        movies.add(movie(204L, "逆风终点线", "运动/励志", "2026-08-09", 118, "宋桥", "顾晨、邵雨"));
-        movies.add(movie(205L, "夜色档案", "悬疑/犯罪", "2026-08-16", 124, "叶舟", "秦澈、沈禾"));
+        movies.add(movie(201L, "星港来信", "剧情/奇幻", "2026-07-18", 118, "陆星遥", "林望舒、许澈", "8.6",
+                "一名港口邮递员在旧灯塔中发现寄往未来的信件，由此牵出三位陌生人的夏夜约定。影片以温柔的城市夜景和轻奇幻设定讲述选择、告别与重新出发。"));
+        movies.add(movie(202L, "云端列车", "冒险/家庭", "2026-07-26", 126, "沈雁南", "顾知远、叶清欢", "8.3",
+                "少年工程师登上一列只在云层中运行的列车，寻找失踪的父亲和被遗忘的车站。影片将冒险、公路片节奏和家庭情感结合，适合全年龄观众。"));
+        movies.add(movie(203L, "第七号观测站", "科幻/悬疑", "2026-08-01", 132, "韩青岚", "程砚、周栀", "8.8",
+                "近未来的海岛观测站收到来自深空的重复信号，值守团队必须在风暴抵达前确认信号来源。影片以密闭空间和科学想象构建渐进式悬念。"));
+        movies.add(movie(204L, "夏日猫咪事务所", "喜剧/治愈", "2026-08-09", 102, "林若川", "白禾、孟舟", "8.1",
+                "一间只在夏天营业的街角事务所，专门帮邻里解决与猫有关的小麻烦。看似琐碎的委托逐渐拼成街区居民的温暖关系网。"));
+        movies.add(movie(205L, "深海信号", "悬疑/冒险", "2026-08-16", 124, "叶知微", "秦砚、苏眠", "8.4",
+                "海洋声学研究员在一次例行监听中捕捉到异常脉冲，她与队友潜入废弃海底站，寻找信号背后的真相。影片突出水下空间压迫感。"));
+        movies.add(movie(206L, "城市微光", "剧情/音乐", "2026-08-23", 116, "江闻笛", "夏临、宋予白", "8.5",
+                "三个在夜班中相遇的年轻人组成临时乐队，用一场街角演出回应各自的生活困境。影片以城市夜色、原创旋律和细腻群像铺陈希望。"));
     }
 
-    private MovieCard movie(Long id, String title, String genre, String releaseDate, int duration, String director, String actors) {
+    private MovieCard movie(Long id, String title, String genre, String releaseDate, int duration, String director, String actors, String rating, String synopsis) {
         MovieCard movie = new MovieCard();
         movie.setId(id);
         movie.setTitle(title);
@@ -281,8 +301,9 @@ public class DemoDataService {
         movie.setDurationMinutes(duration);
         movie.setDirector(director);
         movie.setActors(actors);
-        movie.setPoster("/posters/movie/movie-" + id + ".svg");
-        movie.setSummary("影片正在热映，支持按影院和场次选择座位购票。");
+        movie.setPoster("/uploads/posters/movie/movie-" + id + ".svg");
+        movie.setSummary(synopsis);
+        movie.setRating(rating);
         movie.setSessions(List.of(
                 new SessionOption(id * 10 + 1, releaseDate + " 10:30", "2026-07-10 10:00", "2026-12-31 23:00", "1号厅", "SELECTABLE"),
                 new SessionOption(id * 10 + 2, releaseDate + " 19:40", "2026-07-10 10:00", "2026-12-31 23:00", "2号厅", "SELECTABLE")

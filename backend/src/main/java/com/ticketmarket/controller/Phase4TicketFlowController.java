@@ -56,6 +56,11 @@ public class Phase4TicketFlowController {
         return Result.ok(service.createOrder(currentUserId(), payload));
     }
 
+    @PostMapping("/api/reservations")
+    public Result<Map<String, Object>> createReservation(@RequestBody Map<String, Object> payload) {
+        return Result.ok(service.createReservation(currentUserId(), payload));
+    }
+
     @PostMapping("/api/orders/{id}/cancel")
     public Result<Map<String, Object>> cancelOrder(@PathVariable Long id) {
         return Result.ok(service.cancelOrder(id, currentUserId()));

@@ -12,6 +12,8 @@ const readStoredUser = () => {
   }
 }
 
+const isLocalAdminHost = () => ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname)
+
 export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem(tokenKey) || '',
@@ -22,9 +24,9 @@ export const useUserStore = defineStore('user', {
     profile: (state) => state.userInfo,
     role: (state) => state.userInfo?.roleCode || '',
     isLoggedIn: (state) => Boolean(state.token && state.userInfo),
-    canEnterAdmin: (state) => ['ADMIN', 'MANAGER', 'CHECKER'].includes(state.userInfo?.roleCode),
-    canUseAdminApi: (state) => ['ADMIN', 'MANAGER'].includes(state.userInfo?.roleCode),
-    canUseChecker: (state) => ['ADMIN', 'MANAGER', 'CHECKER'].includes(state.userInfo?.roleCode)
+    canEnterAdmin: (state) => isLocalAdminHost() && ['ADMIN', 'MANAGER', 'CHECKER'].includes(state.userInfo?.roleCode),
+    canUseAdminApi: (state) => isLocalAdminHost() && ['ADMIN', 'MANAGER'].includes(state.userInfo?.roleCode),
+    canUseChecker: (state) => isLocalAdminHost() && ['ADMIN', 'MANAGER', 'CHECKER'].includes(state.userInfo?.roleCode)
   },
   actions: {
     async login(payload) {

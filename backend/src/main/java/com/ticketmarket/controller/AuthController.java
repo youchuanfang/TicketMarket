@@ -11,6 +11,7 @@ import com.ticketmarket.model.UserAccount;
 import com.ticketmarket.service.DemoDataService;
 import com.ticketmarket.util.JwtUtil;
 import com.ticketmarket.util.PasswordUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,11 +31,14 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public Result<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public Result<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
         UserAccount account = dataService.findUserByName(request.username())
                 .orElseThrow(() -> new ApiException(401, "用户名或密码错误"));
         if (!PasswordUtil.matches(request.password(), account.getPasswordHash())) {
             throw new ApiException(401, "用户名或密码错误");
+        }
+        if (isPrivilegedRole(account.getRoleCode()) && !isLocalRequest(servletRequest)) {
+            throw new ApiException(403, "后台账号仅允许在服务器本机登录");
         }
         return Result.ok(toAuthResponse(account));
     }
@@ -81,5 +85,14 @@ public class AuthController {
                 account.getUsername() + "@example.com",
                 account.isRealNameVerified() ? "3301**********2245" : ""
         );
+    }
+
+    private boolean isPrivilegedRole(String roleCode) {
+        return "ADMIN".equals(roleCode) || "MANAGER".equals(roleCode) || "CHECKER".equals(roleCode);
+    }
+
+    private boolean isLocalRequest(HttpServletRequest request) {
+        String host = request.getServerName();
+        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host) || "[::1]".equals(host);
     }
 }

@@ -15,8 +15,8 @@
         <el-select v-model="status" placeholder="状态" clearable>
           <el-option label="正在售票" value="ON_SALE" />
           <el-option label="即将开售" value="COMING_SOON" />
-          <el-option label="少量回流" value="RETURNED" />
-          <el-option label="本轮锁票" value="LOCKED" />
+          <el-option label="票量紧张" value="RETURNED" />
+          <el-option label="已结束" value="LOCKED" />
         </el-select>
         <el-button type="primary" :icon="Search" @click="load">筛选</el-button>
       </div>

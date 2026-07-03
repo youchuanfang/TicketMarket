@@ -5,6 +5,7 @@ import java.util.List;
 public class PerformanceCard {
     private Long id;
     private String title;
+    private String subtitle;
     private String categoryCode;
     private String categoryName;
     private String city;
@@ -14,6 +15,8 @@ public class PerformanceCard {
     private Integer priceMin;
     private Integer priceMax;
     private String poster;
+    private String banner;
+    private String detailImage;
     private String saleStatus;
     private String saleMode;
     private List<String> tags;
@@ -44,6 +47,14 @@ public class PerformanceCard {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getSubtitle() {
+        return subtitle;
+    }
+
+    public void setSubtitle(String subtitle) {
+        this.subtitle = subtitle;
     }
 
     public String getCategoryCode() {
@@ -116,6 +127,22 @@ public class PerformanceCard {
 
     public void setPoster(String poster) {
         this.poster = poster;
+    }
+
+    public String getBanner() {
+        return banner;
+    }
+
+    public void setBanner(String banner) {
+        this.banner = banner;
+    }
+
+    public String getDetailImage() {
+        return detailImage;
+    }
+
+    public void setDetailImage(String detailImage) {
+        this.detailImage = detailImage;
     }
 
     public String getSaleStatus() {

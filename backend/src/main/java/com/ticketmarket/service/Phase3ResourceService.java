@@ -244,6 +244,19 @@ public class Phase3ResourceService {
         return ticketLevels.stream().filter(item -> Objects.equals(item.get("sessionId"), sessionId)).map(this::copy).toList();
     }
 
+    public List<Map<String, Object>> frontTicketLevels(Long sessionId) {
+        Map<String, Object> saleStatus = frontSaleStatus(sessionId);
+        String status = String.valueOf(saleStatus.get("status"));
+        return ticketLevels.stream()
+                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                .map(item -> {
+                    Map<String, Object> row = copy(item);
+                    row.put("frontStatus", ticketLevelFrontStatus(row, status));
+                    return row;
+                })
+                .toList();
+    }
+
     public Map<String, Object> ticketLevel(Long id) {
         return copy(find(ticketLevels, id, "票档不存在"));
     }
@@ -449,12 +462,58 @@ public class Phase3ResourceService {
     }
 
     public Map<String, Object> activeBatch(Long sessionId) {
-        return saleBatches.stream()
+        Map<String, Object> batch = saleBatches.stream()
                 .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
                 .filter(item -> "SELLING".equals(item.get("status")) || "NOT_STARTED".equals(item.get("status")))
+                .sorted(Comparator.comparing(item -> parseTime(String.valueOf(item.get("saleStartTime")))))
                 .findFirst()
                 .map(this::copy)
                 .orElse(null);
+        if (batch != null) {
+            batch.putAll(frontSaleStatus(sessionId));
+        }
+        return batch;
+    }
+
+    public Map<String, Object> frontSaleStatus(Long sessionId) {
+        Map<String, Object> batch = frontBatch(sessionId);
+        if (batch == null) {
+            return map("status", "UNAVAILABLE", "buttonText", "暂不可售", "clickable", false, "hasStock", false);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime saleStart = parseTime(String.valueOf(batch.get("saleStartTime")));
+        LocalDateTime lockTime = parseTime(String.valueOf(batch.get("lockTime")));
+        boolean hasStock = hasFrontStock(batch);
+        if (now.isBefore(saleStart)) {
+            return frontStatus(batch, "RESERVABLE", "预约抢票", true, hasStock);
+        }
+        if (!now.isBefore(lockTime) || "LOCKED".equals(batch.get("status"))) {
+            boolean hasNext = hasFutureBatch(sessionId, now);
+            return frontStatus(batch, hasNext ? "RESERVABLE" : "ENDED", hasNext ? "预约抢票" : "已结束", hasNext, false);
+        }
+        if (!hasStock) {
+            return frontStatus(batch, "SOLD_OUT", "缺货中", false, false);
+        }
+        return frontStatus(batch, "ON_SALE", "立即购票", true, true);
+    }
+
+    public void assertFrontSaleOpen(Long sessionId, Long batchId) {
+        Map<String, Object> batch = batchId == null ? frontBatch(sessionId) : saleBatch(batchId);
+        if (batch == null || !Objects.equals(batch.get("sessionId"), sessionId)) {
+            throw new ApiException(404, "当前场次暂无可用售票批次");
+        }
+        Map<String, Object> status = frontSaleStatus(sessionId);
+        if (!Objects.equals(status.get("batchId"), batch.get("id")) || !"ON_SALE".equals(status.get("status"))) {
+            throw new ApiException(409, "当前场次暂未开放购票，可先预约抢票");
+        }
+    }
+
+    public void assertSeatSelectionOpen(Long sessionId, Long batchId) {
+        try {
+            assertFrontSaleOpen(sessionId, batchId);
+        } catch (ApiException ex) {
+            throw new ApiException(ex.getCode(), "当前场次暂未开放选座，可先预约抢票");
+        }
     }
 
     public Map<String, Object> initRedisStock(Long batchId) {
@@ -590,6 +649,74 @@ public class Phase3ResourceService {
 
     private String redisStockKey(Long batchId, Long ticketLevelId) {
         return "ticket:batch:" + batchId + ":level:" + ticketLevelId + ":stock";
+    }
+
+    private Map<String, Object> frontBatch(Long sessionId) {
+        LocalDateTime now = LocalDateTime.now();
+        return saleBatches.stream()
+                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                .filter(item -> !"CANCELLED".equals(item.get("status")))
+                .filter(item -> now.isBefore(parseTime(String.valueOf(item.get("lockTime"))) )
+                        || "SELLING".equals(item.get("status"))
+                        || "NOT_STARTED".equals(item.get("status")))
+                .sorted(Comparator.comparing(item -> parseTime(String.valueOf(item.get("saleStartTime")))))
+                .findFirst()
+                .orElseGet(() -> saleBatches.stream()
+                        .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                        .max(Comparator.comparing(item -> parseTime(String.valueOf(item.get("lockTime")))))
+                        .orElse(null));
+    }
+
+    private Map<String, Object> frontStatus(Map<String, Object> batch, String status, String buttonText, boolean clickable, boolean hasStock) {
+        return map(
+                "batchId", batch.get("id"),
+                "status", status,
+                "frontStatus", status,
+                "buttonText", buttonText,
+                "clickable", clickable,
+                "hasStock", hasStock,
+                "saleStartTime", batch.get("saleStartTime"),
+                "saleEndTime", batch.get("lockTime")
+        );
+    }
+
+    private boolean hasFutureBatch(Long sessionId, LocalDateTime now) {
+        return saleBatches.stream()
+                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                .anyMatch(item -> now.isBefore(parseTime(String.valueOf(item.get("saleStartTime")))));
+    }
+
+    private boolean hasFrontStock(Map<String, Object> batch) {
+        Long batchId = (Long) batch.get("id");
+        Long sessionId = (Long) batch.get("sessionId");
+        return ticketLevels.stream()
+                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                .anyMatch(level -> stockFor(batchId, level) > 0);
+    }
+
+    private int stockFor(Long batchId, Map<String, Object> level) {
+        String redisStock = redisTemplate.opsForValue().get(redisStockKey(batchId, (Long) level.get("id")));
+        if (redisStock != null && !redisStock.isBlank()) {
+            return Math.max(0, Integer.parseInt(redisStock));
+        }
+        int releaseQuantity = intValue(saleBatch(batchId), "releaseQuantity", 0);
+        int released = (Integer) level.get("releasedStock");
+        int sold = (Integer) level.get("soldStock");
+        return Math.max(0, Math.min(released, releaseQuantity == 0 ? released : releaseQuantity) - sold);
+    }
+
+    private String ticketLevelFrontStatus(Map<String, Object> level, String saleStatus) {
+        if ("RESERVABLE".equals(saleStatus)) {
+            return "暂未开售";
+        }
+        if (!"ON_SALE".equals(saleStatus)) {
+            return "不可售";
+        }
+        int stock = stockFor((Long) frontSaleStatus((Long) level.get("sessionId")).get("batchId"), level);
+        if (stock <= 0) {
+            return "缺货";
+        }
+        return stock <= 10 ? "票量紧张" : "可选";
     }
 
     private Map<String, Object> find(List<Map<String, Object>> source, Long id, String message) {

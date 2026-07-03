@@ -27,8 +27,8 @@ const props = defineProps({
 const statusMap = {
   ON_SALE: '正在售票',
   COMING_SOON: '即将开售',
-  RETURNED: '少量回流',
-  LOCKED: '本轮锁票'
+  RETURNED: '票量紧张',
+  LOCKED: '已结束'
 }
 
 const modeMap = {
