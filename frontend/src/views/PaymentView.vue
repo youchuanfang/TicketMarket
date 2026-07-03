@@ -5,9 +5,9 @@
       <div class="flow-main">
         <h2>选择支付方式</h2>
         <el-radio-group v-model="payMethod">
-          <el-radio-button label="MOCK_ALIPAY">模拟支付宝</el-radio-button>
-          <el-radio-button label="MOCK_WECHAT">模拟微信</el-radio-button>
-          <el-radio-button label="BALANCE">余额支付</el-radio-button>
+          <el-radio-button value="MOCK_ALIPAY">模拟支付宝</el-radio-button>
+          <el-radio-button value="MOCK_WECHAT">模拟微信</el-radio-button>
+          <el-radio-button value="BALANCE">余额支付</el-radio-button>
         </el-radio-group>
         <p class="seat-tip">当前页面只展示支付确认结果，不会发起真实扣款。</p>
       </div>

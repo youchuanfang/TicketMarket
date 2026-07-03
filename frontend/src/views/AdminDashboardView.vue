@@ -213,18 +213,75 @@
         </el-table>
       </section>
 
+      <section v-else-if="activeSection === 'refunds'" class="admin-card">
+        <div class="table-head">
+          <h2>退票审核</h2>
+          <el-button type="primary" plain @click="loadOperations">刷新</el-button>
+        </div>
+        <el-table :data="refunds" border empty-text="暂无数据">
+          <el-table-column prop="orderId" label="订单" width="100" />
+          <el-table-column label="金额" width="120">
+            <template #default="{ row }">¥{{ row.amount }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="120">
+            <template #default="{ row }">{{ refundStatusText(row.status) }}</template>
+          </el-table-column>
+          <el-table-column prop="message" label="说明" />
+          <el-table-column label="操作" width="160">
+            <template #default="{ row }">
+              <el-button v-if="row.status === 'APPLYING'" link type="primary" @click="approve(row)">通过</el-button>
+              <el-button v-if="row.status === 'APPLYING'" link type="danger" @click="reject(row)">驳回</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
+
+      <section v-else-if="activeSection === 'reports'" class="admin-card">
+        <div class="table-head">
+          <h2>统计报表</h2>
+          <el-button type="primary" plain @click="loadOperations">刷新</el-button>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><span>订单数</span><strong>{{ statistics.orderCount }}</strong></div>
+          <div class="metric"><span>销售额</span><strong>¥{{ statistics.salesAmount }}</strong></div>
+          <div class="metric"><span>电子票</span><strong>{{ statistics.ticketCount }}</strong></div>
+          <div class="metric"><span>退票</span><strong>{{ statistics.refundCount }}</strong></div>
+          <div class="metric"><span>核验</span><strong>{{ statistics.checkinCount }}</strong></div>
+          <div class="metric"><span>抢票成功率</span><strong>{{ statistics.rushSuccessRate }}</strong></div>
+        </div>
+      </section>
+
       <template v-else-if="activeSection === 'checkin'">
         <div class="metric-grid">
           <div class="metric"><span>今日核验</span><strong>{{ checkerMetrics.checkinToday }}</strong></div>
           <div class="metric"><span>通过率</span><strong>{{ checkerMetrics.successRate }}</strong></div>
           <div class="metric wide"><span>通道状态</span><strong>{{ checkerMetrics.latestResult }}</strong></div>
         </div>
-        <section class="admin-card empty-admin">
-          <el-icon><Tickets /></el-icon>
+        <section class="admin-card">
           <h2>检票管理</h2>
-          <p>请在检票入口输入票号或扫描二维码完成核验。</p>
+          <div class="resource-form">
+            <el-input v-model="ticketCode" placeholder="输入票号或入场码" />
+            <el-button type="primary" @click="verify">核验</el-button>
+          </div>
+          <el-table :data="checkins" border empty-text="暂无数据">
+            <el-table-column prop="ticketNo" label="票号" />
+            <el-table-column prop="message" label="核验结果" />
+            <el-table-column prop="createdAt" label="时间" width="180" />
+          </el-table>
         </section>
       </template>
+
+      <section v-else-if="activeSection === 'risk-logs'" class="admin-card">
+        <div class="table-head">
+          <h2>风控日志</h2>
+          <el-button type="primary" plain @click="loadOperations">刷新</el-button>
+        </div>
+        <el-table :data="riskLogs" border empty-text="暂无数据">
+          <el-table-column prop="action" label="类型" width="140" />
+          <el-table-column prop="detail" label="内容" />
+          <el-table-column prop="createdAt" label="时间" width="180" />
+        </el-table>
+      </section>
 
       <section v-else class="admin-card empty-admin">
         <el-icon><FolderOpened /></el-icon>
@@ -241,6 +298,7 @@ import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { http } from '../api/http'
 import { adminApi } from '../api/adminResources'
+import { approveRefund, getAdminRefunds, getCheckins, getRiskLogs, getStatisticsOverview, rejectRefund, verifyTicket } from '../api/operations'
 import { useUserStore } from '../stores/user'
 
 const SeatSvg = {
@@ -290,6 +348,11 @@ const sessions = ref([])
 const ticketLevels = ref([])
 const saleBatches = ref([])
 const stockPool = ref([])
+const refunds = ref([])
+const checkins = ref([])
+const riskLogs = ref([])
+const statistics = reactive({ orderCount: 0, salesAmount: 0, ticketCount: 0, refundCount: 0, checkinCount: 0, rushSuccessRate: '0%' })
+const ticketCode = ref('')
 const selectedSessionId = ref(null)
 const seatFormAreas = ref([])
 const seatForm = reactive({ venueId: 1, areaId: 1, rowStart: 1, rowEnd: 3, seatsPerRow: 12, startX: 60, startY: 80, gapX: 30, gapY: 30, aisleAfterSeats: '6' })
@@ -349,7 +412,9 @@ const areaTypeMap = {
 }
 const sourceTypeMap = {
   POST_LOCK_RETURNED: '锁票回收',
+  POST_LOCK_RETURN: '锁票回收',
   REFUND_WAITING_RELEASE: '退票待释放',
+  REFUND_RETURN: '退票回流',
   UNRELEASED: '未开放库存',
   MANUAL_ADD: '人工调整'
 }
@@ -359,6 +424,7 @@ const purchaseModeText = (value) => textFromMap(purchaseModeMap, value)
 const releaseTypeText = (value) => textFromMap(releaseTypeMap, value)
 const areaTypeText = (value) => textFromMap(areaTypeMap, value)
 const sourceTypeText = (value) => textFromMap(sourceTypeMap, value)
+const refundStatusText = (value) => textFromMap({ APPLYING: '待审核', APPROVED: '已通过', REJECTED: '已驳回' }, value)
 
 const activeSection = computed(() => {
   if (route.name === 'admin-venue-areas') return 'venue-areas'
@@ -384,6 +450,17 @@ const loadAll = async () => {
     await loadAreasForSeatForm()
   }
   if (user.canUseChecker) Object.assign(checkerMetrics, await http.get('/api/checker/dashboard'))
+  await loadOperations()
+}
+const loadOperations = async () => {
+  if (user.canUseAdminApi) {
+    refunds.value = await getAdminRefunds()
+    Object.assign(statistics, await getStatisticsOverview())
+    riskLogs.value = await getRiskLogs()
+  }
+  if (user.canUseChecker) {
+    checkins.value = await getCheckins()
+  }
 }
 const loadAreasForRoute = async () => {
   if (route.params.id) areas.value = await adminApi.areas(route.params.id)
@@ -447,11 +524,38 @@ const initRedis = async (row) => {
   await adminApi.initRedisStock(row.id)
   ElMessage.success('实时库存已初始化')
 }
+const approve = async (row) => {
+  await approveRefund(row.id)
+  ElMessage.success('退票审核已通过')
+  await loadOperations()
+}
+const reject = async (row) => {
+  await rejectRefund(row.id)
+  ElMessage.success('退票申请已驳回')
+  await loadOperations()
+}
+const verify = async () => {
+  if (!ticketCode.value) {
+    ElMessage.warning('请输入票号或入场码')
+    return
+  }
+  const result = await verifyTicket({ ticketNo: ticketCode.value })
+  ElMessage.success(result.message)
+  ticketCode.value = ''
+  await loadOperations()
+}
 const logout = async () => {
   await user.logout()
   router.push('/')
 }
 
-watch(() => route.fullPath, loadAll)
-onMounted(loadAll)
+watch(() => route.fullPath, () => {
+  loadAll()
+  loadOperations()
+})
+watch(activeSection, loadOperations)
+onMounted(() => {
+  loadAll()
+  loadOperations()
+})
 </script>

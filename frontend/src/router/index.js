@@ -21,6 +21,7 @@ import OrdersView from '../views/OrdersView.vue'
 import OrderDetailView from '../views/OrderDetailView.vue'
 import TicketsView from '../views/TicketsView.vue'
 import TicketDetailView from '../views/TicketDetailView.vue'
+import MessagesView from '../views/MessagesView.vue'
 import { useUserStore } from '../stores/user'
 
 const router = createRouter({
@@ -50,7 +51,7 @@ const router = createRouter({
     { path: '/orders/:id', name: 'order-detail', component: OrderDetailView, meta: { requiresAuth: true } },
     { path: '/tickets', name: 'tickets', component: TicketsView, meta: { requiresAuth: true } },
     { path: '/tickets/:id', name: 'ticket-detail', component: TicketDetailView, meta: { requiresAuth: true } },
-    { path: '/messages', name: 'messages', component: PlaceholderView, meta: { requiresAuth: true, title: '我的消息', description: '暂无消息' } },
+    { path: '/messages', name: 'messages', component: MessagesView, meta: { requiresAuth: true } },
     { path: '/admin/venue/:id/areas', name: 'admin-venue-areas', component: AdminDashboardView, meta: { requiresAuth: true, requiresAdminEntry: true } },
     { path: '/admin/venue/:id/seats', name: 'admin-venue-seats', component: AdminDashboardView, meta: { requiresAuth: true, requiresAdminEntry: true } },
     { path: '/admin/:section?', name: 'admin-dashboard', component: AdminDashboardView, meta: { requiresAuth: true, requiresAdminEntry: true } }

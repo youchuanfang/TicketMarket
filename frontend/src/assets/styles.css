@@ -1032,6 +1032,34 @@ button {
   color: var(--brand);
 }
 
+.message-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.message-item:last-child {
+  border-bottom: 0;
+}
+
+.message-item h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.message-item p {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.message-item span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .qr-box {
   width: 220px;
   aspect-ratio: 1;
