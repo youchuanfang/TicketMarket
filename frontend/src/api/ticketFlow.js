@@ -1,0 +1,16 @@
+import { http } from './http'
+
+export const submitRush = (payload) => http.post('/api/rush/submit', payload)
+export const getRush = (requestId) => http.get(`/api/rush/${requestId}`)
+export const getRushResult = (requestId) => http.get(`/api/rush/${requestId}/result`)
+export const createOrder = (payload) => http.post('/api/orders/create', payload)
+export const cancelOrder = (id) => http.post(`/api/orders/${id}/cancel`)
+export const payOrder = (orderId, payload) => http.post(`/api/payment/${orderId}/pay`, payload)
+export const getPayment = (orderId) => http.get(`/api/payment/${orderId}`)
+export const getOrders = () => http.get('/api/user/orders')
+export const getOrder = (id) => http.get(`/api/user/orders/${id}`)
+export const getTickets = () => http.get('/api/user/tickets')
+export const getTicket = (id) => http.get(`/api/user/tickets/${id}`)
+export const lockSeats = (payload) => http.post('/api/seats/lock', payload)
+export const releaseSeats = (payload) => http.post('/api/seats/release', payload)
+export const getSeatLocks = (sessionId) => http.get(`/api/seats/locks/${sessionId}`)

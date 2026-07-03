@@ -29,12 +29,15 @@
           <span>{{ seat.seatLabel }}</span>
           <strong>¥{{ levelPrice(seat.ticketLevelId) }}</strong>
         </div>
+        <el-select v-model="viewerIds" multiple placeholder="选择观演人">
+          <el-option v-for="viewer in viewers" :key="viewer.id" :label="`${viewer.name} ${viewer.idCardMasked}`" :value="viewer.id" />
+        </el-select>
         <div class="seat-total">
           <span>合计</span>
           <strong>¥{{ totalPrice }}</strong>
         </div>
-        <el-button type="primary" size="large" :disabled="!selectedSeats.length">确认选座</el-button>
-        <p class="seat-tip">本页用于选座状态确认，订单与支付将在购票流程中继续完成。</p>
+        <el-button type="primary" size="large" :disabled="!selectedSeats.length" :loading="submitting" @click="submit">确认选座</el-button>
+        <p class="seat-tip">确认后将进入抢票队列，请在成功后及时完成支付。</p>
       </aside>
     </section>
   </div>
@@ -42,15 +45,22 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SectionHeader from '../components/SectionHeader.vue'
-import { getSessionSeats, getSessionTicketLevels } from '../api/portal'
+import { getActiveBatch, getSessionSeats, getSessionTicketLevels } from '../api/portal'
+import { getViewers } from '../api/auth'
+import { submitRush } from '../api/ticketFlow'
 
 const route = useRoute()
+const router = useRouter()
 const seats = ref([])
 const ticketLevels = ref([])
+const viewers = ref([])
+const viewerIds = ref([])
+const batch = ref(null)
 const selectedIds = ref([])
+const submitting = ref(false)
 
 const legends = [
   { status: 'AVAILABLE', label: '可售', color: '#2f9e44' },
@@ -81,8 +91,38 @@ const toggleSeat = (seat) => {
   }
 }
 
+const submit = async () => {
+  if (viewerIds.value.length !== selectedSeats.value.length) {
+    ElMessage.warning('请选择对应数量的观演人')
+    return
+  }
+  const levelIds = new Set(selectedSeats.value.map((seat) => seat.ticketLevelId))
+  if (levelIds.size > 1) {
+    ElMessage.warning('请在同一票档内选择座位')
+    return
+  }
+  submitting.value = true
+  try {
+    const firstSeat = selectedSeats.value[0]
+    const request = await submitRush({
+      sessionId: Number(route.params.id),
+      batchId: batch.value?.id,
+      ticketLevelId: firstSeat.ticketLevelId,
+      quantity: selectedSeats.value.length,
+      viewerIds: viewerIds.value,
+      selectedSeatIds: selectedIds.value
+    })
+    router.push(`/rush/queue/${request.requestId}`)
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(async () => {
   seats.value = await getSessionSeats(route.params.id)
   ticketLevels.value = await getSessionTicketLevels(route.params.id)
+  viewers.value = await getViewers()
+  viewerIds.value = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id)
+  batch.value = await getActiveBatch(route.params.id)
 })
 </script>

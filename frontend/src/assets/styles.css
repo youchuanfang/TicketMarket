@@ -936,6 +936,122 @@ button {
   line-height: 1.6;
 }
 
+.flow-panel,
+.list-panel,
+.detail-card,
+.ticket-detail {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.flow-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: start;
+}
+
+.flow-main h2,
+.detail-card h2,
+.ticket-detail h2 {
+  margin: 0 0 16px;
+  font-size: 22px;
+}
+
+.flow-aside {
+  border-left: 1px solid var(--border);
+  padding-left: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.flow-aside p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.flow-aside strong {
+  font-size: 26px;
+  color: var(--brand);
+}
+
+.flow-status {
+  min-height: 420px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 48px 24px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 18px;
+  text-align: center;
+}
+
+.loader-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 6px solid #f3c4ca;
+  border-top-color: var(--brand);
+  animation: spin 0.9s linear infinite;
+}
+
+.queue-metric {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.queue-metric strong {
+  font-size: 34px;
+  color: var(--text);
+}
+
+.ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.ticket-card {
+  display: grid;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.ticket-card strong {
+  color: var(--brand);
+}
+
+.qr-box {
+  width: 220px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 20px;
+  border: 12px solid #111827;
+  border-radius: 8px;
+  font-weight: 800;
+  text-align: center;
+  word-break: break-all;
+  padding: 12px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .admin-card {
   margin-top: 22px;
   padding: 22px;
@@ -1081,6 +1197,17 @@ button {
   .resource-form,
   .seat-purchase-layout {
     grid-template-columns: 1fr;
+  }
+
+  .flow-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-aside {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 18px;
   }
 
   .hero-copy {

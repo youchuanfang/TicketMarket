@@ -201,6 +201,10 @@ public class Phase3ResourceService {
         return copyList(sessions);
     }
 
+    public Map<String, Object> session(Long id) {
+        return copy(find(sessions, id, "场次不存在"));
+    }
+
     public List<Map<String, Object>> sessionsByPerformance(Long performanceId) {
         return sessions.stream().filter(item -> Objects.equals(item.get("performanceId"), performanceId)).map(this::copy).toList();
     }
@@ -238,6 +242,10 @@ public class Phase3ResourceService {
 
     public List<Map<String, Object>> ticketLevels(Long sessionId) {
         return ticketLevels.stream().filter(item -> Objects.equals(item.get("sessionId"), sessionId)).map(this::copy).toList();
+    }
+
+    public Map<String, Object> ticketLevel(Long id) {
+        return copy(find(ticketLevels, id, "票档不存在"));
     }
 
     public Map<String, Object> createTicketLevel(Map<String, Object> payload) {
@@ -318,6 +326,83 @@ public class Phase3ResourceService {
             item.put("status", status);
             item.put("updatedAt", now());
         });
+    }
+
+    public synchronized List<Map<String, Object>> lockSessionSeats(Long sessionId, List<Long> ids, Long userId, Long batchId, int minutes) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> targets = sessionSeats.stream()
+                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                .filter(item -> ids.contains((Long) item.get("id")))
+                .toList();
+        if (targets.size() != ids.size()) {
+            throw new ApiException(404, "部分座位不存在");
+        }
+        if (targets.stream().anyMatch(item -> !"AVAILABLE".equals(item.get("status")))) {
+            throw new ApiException(409, "所选座位已被占用，请重新选择");
+        }
+        String expireTime = FORMATTER.format(LocalDateTime.now().plusMinutes(minutes));
+        targets.forEach(item -> {
+            item.put("status", "LOCKED");
+            item.put("batchId", batchId);
+            item.put("lockUserId", userId);
+            item.put("lockExpireTime", expireTime);
+            item.put("updatedAt", now());
+        });
+        return targets.stream().map(this::copy).toList();
+    }
+
+    public synchronized List<Map<String, Object>> autoAllocateSeats(Long sessionId, Long ticketLevelId, int quantity, Long userId, Long batchId) {
+        List<Long> ids = sessionSeats.stream()
+                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                .filter(item -> Objects.equals(item.get("ticketLevelId"), ticketLevelId))
+                .filter(item -> "AVAILABLE".equals(item.get("status")))
+                .limit(quantity)
+                .map(item -> (Long) item.get("id"))
+                .toList();
+        if (ids.size() < quantity) {
+            throw new ApiException(409, "可售座位不足，请调整票档或数量");
+        }
+        return lockSessionSeats(sessionId, ids, userId, batchId, 5);
+    }
+
+    public synchronized void releaseSessionSeats(List<Long> ids, Long userId) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        sessionSeats.stream()
+                .filter(item -> ids.contains((Long) item.get("id")))
+                .filter(item -> userId == null || Objects.equals(item.get("lockUserId"), userId))
+                .filter(item -> "LOCKED".equals(item.get("status")))
+                .forEach(item -> {
+                    item.put("status", "AVAILABLE");
+                    item.put("batchId", null);
+                    item.put("lockUserId", null);
+                    item.put("lockExpireTime", null);
+                    item.put("updatedAt", now());
+                });
+    }
+
+    public synchronized void markSessionSeatsSold(List<Long> ids, Long userId) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        sessionSeats.stream()
+                .filter(item -> ids.contains((Long) item.get("id")))
+                .filter(item -> userId == null || Objects.equals(item.get("lockUserId"), userId))
+                .forEach(item -> {
+                    item.put("status", "SOLD");
+                    item.put("lockExpireTime", null);
+                    item.put("updatedAt", now());
+                });
+    }
+
+    public synchronized void increaseTicketLevelSold(Long id, int quantity) {
+        Map<String, Object> level = find(ticketLevels, id, "票档不存在");
+        level.put("soldStock", (Integer) level.get("soldStock") + quantity);
+        level.put("lockedStock", Math.max(0, (Integer) level.get("lockedStock") - quantity));
+        level.put("updatedAt", now());
     }
 
     public List<Map<String, Object>> saleBatches() {
