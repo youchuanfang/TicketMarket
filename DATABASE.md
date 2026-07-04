@@ -131,3 +131,11 @@
 2. `PersistentPerformanceService` 检查 `performance` 是否为空，为空才导入演示演出。
 3. `Phase3ResourceService` 检查场馆和场次相关表是否为空，为空才导入演示场馆、座位、场次、票档和批次。
 4. 如果表内已有管理员创建的数据，启动流程不会清空或覆盖。
+
+## Admin publishing additions
+
+- `venue.venue_type`: `THEATER`, `STADIUM`, or `CINEMA`; used by the admin seat generator and seat-map renderer.
+- `venue.stage_label`: display label for the stage/screen area, for example `舞台`, `主舞台`, or `银幕`.
+- Stadium templates store section blocks in `seat` with `row_no = 'AREA'`; these blocks can represent inner-field and stand sections such as `A1区`, `B3区`, `101区`, and `601区`.
+- Admin performance creation can fan out one performance into multiple `performance_session` rows, multiple `ticket_level` rows, and an initial `sale_batch` based on the submitted session-time and ticket-tier lists.
+- Image paths saved in `performance.poster_path`, `performance.banner_path`, `performance.detail_image_path`, and `performance_detail_block.image_path` should be relative `/uploads/...` paths, not local disk paths or hardcoded `localhost` URLs.

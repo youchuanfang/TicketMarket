@@ -111,12 +111,41 @@ public class Phase3AdminController {
         if (!List.of(".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg").contains(suffix)) {
             suffix = ".jpg";
         }
+        Path target = newUploadTarget(originalName);
+        file.transferTo(target);
+        return Result.ok(Map.of("path", "/uploads/admin/" + target.getFileName()));
+    }
+
+    @PostMapping("/upload/local-image")
+    public Result<Map<String, Object>> uploadLocalImage(@RequestBody Map<String, Object> payload) throws IOException {
+        String rawPath = String.valueOf(payload.getOrDefault("path", "")).trim();
+        if ((rawPath.startsWith("\"") && rawPath.endsWith("\"")) || (rawPath.startsWith("'") && rawPath.endsWith("'"))) {
+            rawPath = rawPath.substring(1, rawPath.length() - 1);
+        }
+        if (rawPath.isBlank()) {
+            throw new IllegalArgumentException("请填写本机图片路径");
+        }
+        Path source = Paths.get(rawPath).normalize();
+        if (!Files.isRegularFile(source)) {
+            throw new IllegalArgumentException("本机图片不存在或不可读取");
+        }
+        Path target = newUploadTarget(source.getFileName().toString());
+        Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        return Result.ok(Map.of("path", "/uploads/admin/" + target.getFileName()));
+    }
+
+    private Path newUploadTarget(String originalName) throws IOException {
+        String suffix = "";
+        int dot = originalName == null ? -1 : originalName.lastIndexOf('.');
+        if (dot >= 0) {
+            suffix = originalName.substring(dot).toLowerCase(Locale.ROOT);
+        }
+        if (!List.of(".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg").contains(suffix)) {
+            suffix = ".jpg";
+        }
         Path dir = Paths.get("..", "uploads", "admin").normalize();
         Files.createDirectories(dir);
-        String filename = UUID.randomUUID().toString().replace("-", "") + suffix;
-        Path target = dir.resolve(filename);
-        file.transferTo(target);
-        return Result.ok(Map.of("path", "/uploads/admin/" + filename));
+        return dir.resolve(UUID.randomUUID().toString().replace("-", "") + suffix);
     }
 
     @GetMapping("/venues")

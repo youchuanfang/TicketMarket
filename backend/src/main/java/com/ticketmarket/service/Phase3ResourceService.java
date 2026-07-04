@@ -58,7 +58,8 @@ public class Phase3ResourceService {
 
     public List<Map<String, Object>> venues() {
         return rows("""
-                select id, city_id cityId, city_name cityName, name, address, capacity, description, status,
+                select id, city_id cityId, city_name cityName, name, address, capacity, description,
+                       venue_type venueType, stage_label stageLabel, status,
                        created_at createdAt, updated_at updatedAt
                 from venue where deleted = 0 order by id
                 """);
@@ -66,7 +67,8 @@ public class Phase3ResourceService {
 
     public List<Map<String, Object>> hotVenues() {
         return rows("""
-                select id, city_id cityId, city_name cityName, name, address, capacity, description, status,
+                select id, city_id cityId, city_name cityName, name, address, capacity, description,
+                       venue_type venueType, stage_label stageLabel, status,
                        created_at createdAt, updated_at updatedAt
                 from venue where deleted = 0 and status = 'ENABLED' order by id limit 6
                 """);
@@ -74,7 +76,8 @@ public class Phase3ResourceService {
 
     public Map<String, Object> venue(Long id) {
         return one("""
-                select id, city_id cityId, city_name cityName, name, address, capacity, description, status,
+                select id, city_id cityId, city_name cityName, name, address, capacity, description,
+                       venue_type venueType, stage_label stageLabel, status,
                        created_at createdAt, updated_at updatedAt
                 from venue where id = ? and deleted = 0
                 """, "场馆不存在", id);
@@ -82,8 +85,8 @@ public class Phase3ResourceService {
 
     public Map<String, Object> createVenue(Map<String, Object> payload) {
         jdbcTemplate.update("""
-                insert into venue (city_id, city_name, name, address, intro, description, capacity, status, created_at, updated_at, deleted)
-                values (?, ?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
+                insert into venue (city_id, city_name, name, address, intro, description, venue_type, stage_label, capacity, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
                 """,
                 longValue(payload, "cityId", 1L),
                 str(payload, "cityName", "上海"),
@@ -91,6 +94,8 @@ public class Phase3ResourceService {
                 str(payload, "address", "待完善地址"),
                 str(payload, "description", "场馆信息待完善"),
                 str(payload, "description", "场馆信息待完善"),
+                str(payload, "venueType", "THEATER"),
+                str(payload, "stageLabel", "舞台"),
                 intValue(payload, "capacity", 0)
         );
         return venue(lastId());
@@ -99,7 +104,7 @@ public class Phase3ResourceService {
     public Map<String, Object> updateVenue(Long id, Map<String, Object> payload) {
         findVenue(id);
         jdbcTemplate.update("""
-                update venue set name=?, city_name=?, address=?, capacity=?, intro=?, description=?, status=?, updated_at=now()
+                update venue set name=?, city_name=?, address=?, capacity=?, intro=?, description=?, venue_type=?, stage_label=?, status=?, updated_at=now()
                 where id=? and deleted=0
                 """,
                 str(payload, "name", ""),
@@ -108,6 +113,8 @@ public class Phase3ResourceService {
                 intValue(payload, "capacity", 0),
                 str(payload, "description", ""),
                 str(payload, "description", ""),
+                str(payload, "venueType", "THEATER"),
+                str(payload, "stageLabel", "舞台"),
                 str(payload, "status", "ENABLED"),
                 id
         );
@@ -174,6 +181,9 @@ public class Phase3ResourceService {
     }
 
     public List<Map<String, Object>> generateSeats(Long venueId, Map<String, Object> payload) {
+        if ("STADIUM".equals(str(payload, "layoutType", ""))) {
+            return generateStadiumSeats(venueId);
+        }
         Long targetAreaId = longValue(payload, "areaId", null);
         if (targetAreaId == null) {
             targetAreaId = (Long) createArea(venueId, map(
@@ -213,6 +223,75 @@ public class Phase3ResourceService {
             }
         }
         return generated;
+    }
+
+    private List<Map<String, Object>> generateStadiumSeats(Long venueId) {
+        Long fieldAreaId = ensureArea(venueId, "内场", "STANDING", "内场票", "#ff4d4f", 1);
+        Long standAreaId = ensureArea(venueId, "看台", "SEATED", "看台票", "#74c0fc", 2);
+        List<Long> ids = new ArrayList<>();
+
+        String[] fieldRows = {"A", "B", "C", "D"};
+        int[][] fieldOrigins = {{300, 355}, {520, 255}, {360, 155}, {210, 255}};
+        for (int row = 0; row < fieldRows.length; row++) {
+            for (int number = 1; number <= 6; number++) {
+                int x = fieldOrigins[row][0] + (row == 1 || row == 3 ? 0 : (number - 1) * 38);
+                int y = fieldOrigins[row][1] + (row == 1 || row == 3 ? (number - 1) * 34 : 0);
+                if (row == 3) x = fieldOrigins[row][0];
+                ids.add(insertSectionSeat(venueId, fieldAreaId, fieldRows[row] + number + "区", x, y));
+            }
+        }
+
+        ids.addAll(generateRing(venueId, standAreaId, 100, 18, 380, 285, 240, 145, 205, 335));
+        ids.addAll(generateRing(venueId, standAreaId, 200, 18, 380, 285, 300, 190, 190, 350));
+        ids.addAll(generateRing(venueId, standAreaId, 500, 22, 380, 285, 350, 230, 175, 365));
+        ids.addAll(generateRing(venueId, standAreaId, 600, 22, 380, 285, 390, 255, 170, 370));
+
+        return ids.stream().map(this::seat).toList();
+    }
+
+    private List<Long> generateRing(Long venueId, Long areaId, int prefix, int count, int centerX, int centerY, int radiusX, int radiusY, int startDegree, int endDegree) {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            double angle = Math.toRadians(startDegree + (endDegree - startDegree) * (count == 1 ? 0 : (double) i / (count - 1)));
+            int x = centerX + (int) Math.round(Math.cos(angle) * radiusX);
+            int y = centerY + (int) Math.round(Math.sin(angle) * radiusY);
+            ids.add(insertSectionSeat(venueId, areaId, (prefix + i + 1) + "区", x, y));
+        }
+        return ids;
+    }
+
+    private Long ensureArea(Long venueId, String name, String type, String level, String color, int sortOrder) {
+        List<Map<String, Object>> existing = rows("""
+                select id, venue_id venueId, name areaName
+                from venue_area where venue_id=? and name=? and deleted=0
+                """, venueId, name);
+        if (!existing.isEmpty()) return (Long) existing.get(0).get("id");
+        return (Long) createArea(venueId, map(
+                "areaName", name,
+                "areaType", type,
+                "defaultTicketLevel", level,
+                "sortOrder", sortOrder,
+                "color", color
+        )).get("id");
+    }
+
+    private Long insertSectionSeat(Long venueId, Long areaId, String label, int x, int y) {
+        List<Map<String, Object>> existing = rows("""
+                select id from seat where venue_id=? and area_id=? and row_no='AREA' and seat_no=? and deleted=0
+                """, venueId, areaId, label);
+        if (!existing.isEmpty()) {
+            Long id = (Long) existing.get(0).get("id");
+            jdbcTemplate.update("update seat set seat_label=?, x=?, y=?, status='AVAILABLE', updated_at=now() where id=?", label, x, y, id);
+            return id;
+        }
+        jdbcTemplate.update("""
+                insert into seat
+                (venue_id, area_id, row_no, seat_no, seat_label, x, y, is_aisle, is_disabled, status, created_at, updated_at, deleted)
+                values (?, ?, 'AREA', ?, ?, ?, ?, 0, 0, 'AVAILABLE', now(), now(), 0)
+                """, venueId, areaId, label, label, x, y);
+        return jdbcTemplate.queryForObject("""
+                select id from seat where venue_id=? and area_id=? and row_no='AREA' and seat_no=? and deleted=0
+                """, Long.class, venueId, areaId, label);
     }
 
     public Map<String, Object> updateSeat(Long id, Map<String, Object> payload) {
@@ -363,10 +442,12 @@ public class Phase3ResourceService {
 
     public List<Map<String, Object>> sessionSeats(Long sessionId) {
         return rows("""
-                select id, session_id sessionId, seat_id seatId, venue_id venueId, area_id areaId, ticket_level_id ticketLevelId,
-                       batch_id batchId, status, lock_user_id lockUserId, lock_expire_time lockExpireTime,
-                       seat_label seatLabel, x, y, created_at createdAt, updated_at updatedAt
-                from session_seat where session_id = ? order by y, x, id
+                select ss.id, ss.session_id sessionId, ss.seat_id seatId, ss.venue_id venueId, ss.area_id areaId, ss.ticket_level_id ticketLevelId,
+                       ss.batch_id batchId, ss.status, ss.lock_user_id lockUserId, ss.lock_expire_time lockExpireTime,
+                       ss.seat_label seatLabel, coalesce(s.row_no, '') rowNo, coalesce(s.seat_no, '') seatNo,
+                       ss.x, ss.y, ss.created_at createdAt, ss.updated_at updatedAt
+                from session_seat ss left join seat s on ss.seat_id = s.id
+                where ss.session_id = ? order by ss.y, ss.x, ss.id
                 """, sessionId);
     }
 
@@ -698,10 +779,11 @@ public class Phase3ResourceService {
     }
 
     private void insertVenue(Long id, String name, Long cityId, String cityName, String address, int capacity, String description) {
+        String type = capacity >= 1000 ? "STADIUM" : "THEATER";
         jdbcTemplate.update("""
-                insert into venue (id, city_id, city_name, name, address, intro, description, capacity, status, created_at, updated_at, deleted)
-                values (?, ?, ?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
-                """, id, cityId, cityName, name, address, description, description, capacity);
+                insert into venue (id, city_id, city_name, name, address, intro, description, venue_type, stage_label, capacity, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
+                """, id, cityId, cityName, name, address, description, description, type, "舞台", capacity);
     }
 
     private void insertArea(Long id, Long venueId, String name, String level, int sort, String color) {
@@ -798,11 +880,12 @@ public class Phase3ResourceService {
 
     private String sessionSeatSelect() {
         return """
-                select id, session_id sessionId, seat_id seatId, venue_id venueId, area_id areaId, ticket_level_id ticketLevelId,
-                       batch_id batchId, status, lock_user_id lockUserId,
-                       date_format(lock_expire_time, '%Y-%m-%d %H:%i:%s') lockExpireTime,
-                       seat_label seatLabel, x, y, created_at createdAt, updated_at updatedAt
-                from session_seat
+                select ss.id, ss.session_id sessionId, ss.seat_id seatId, ss.venue_id venueId, ss.area_id areaId, ss.ticket_level_id ticketLevelId,
+                       ss.batch_id batchId, ss.status, ss.lock_user_id lockUserId,
+                       date_format(ss.lock_expire_time, '%Y-%m-%d %H:%i:%s') lockExpireTime,
+                       ss.seat_label seatLabel, coalesce(s.row_no, '') rowNo, coalesce(s.seat_no, '') seatNo,
+                       ss.x, ss.y, ss.created_at createdAt, ss.updated_at updatedAt
+                from session_seat ss left join seat s on ss.seat_id = s.id
                 """;
     }
 

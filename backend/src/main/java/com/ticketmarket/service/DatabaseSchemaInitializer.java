@@ -73,6 +73,8 @@ public class DatabaseSchemaInitializer {
                   address varchar(255),
                   intro text,
                   description text,
+                  venue_type varchar(32) not null default 'THEATER',
+                  stage_label varchar(80) not null default '舞台',
                   capacity int not null default 0,
                   status varchar(32) not null default 'ENABLED',
                   created_at datetime not null default current_timestamp,
@@ -257,6 +259,8 @@ public class DatabaseSchemaInitializer {
         addColumn("performance", "start_time", "datetime");
         addColumn("venue", "city_name", "varchar(80)");
         addColumn("venue", "description", "text");
+        addColumn("venue", "venue_type", "varchar(32) not null default 'THEATER'");
+        addColumn("venue", "stage_label", "varchar(80) not null default '舞台'");
         addColumn("venue", "capacity", "int not null default 0");
         addColumn("venue", "status", "varchar(32) not null default 'ENABLED'");
         addColumn("venue_area", "default_ticket_level", "varchar(120)");

@@ -11,6 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -19,8 +23,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -117,9 +123,9 @@ public class PersistentPerformanceService {
                 longValue(payload, "venueId", null),
                 str(payload, "venue", str(payload, "venueName", "")),
                 str(payload, "address", ""),
-                str(payload, "poster", str(payload, "posterPath", "")),
-                str(payload, "banner", str(payload, "bannerPath", str(payload, "poster", ""))),
-                str(payload, "detailImage", str(payload, "detailImagePath", "")),
+                persistImagePath(str(payload, "poster", str(payload, "posterPath", ""))),
+                persistImagePath(str(payload, "banner", str(payload, "bannerPath", str(payload, "poster", "")))),
+                persistImagePath(str(payload, "detailImage", str(payload, "detailImagePath", ""))),
                 decimalValue(payload, "priceMin", BigDecimal.ZERO),
                 decimalValue(payload, "priceMax", BigDecimal.ZERO),
                 str(payload, "summary", ""),
@@ -180,8 +186,10 @@ public class PersistentPerformanceService {
                 performanceId,
                 normalizeBlockType(str(payload, "blockType", str(payload, "type", "PARAGRAPH"))),
                 str(payload, "title", ""),
-                str(payload, "content", ""),
-                str(payload, "imagePath", ""),
+                "IMAGE".equals(normalizeBlockType(str(payload, "blockType", str(payload, "type", "PARAGRAPH"))))
+                        ? persistImagePath(str(payload, "content", str(payload, "imagePath", "")))
+                        : str(payload, "content", ""),
+                persistImagePath(str(payload, "imagePath", str(payload, "content", ""))),
                 intValue(payload, "sortOrder", nextOrder == null ? 1 : nextOrder)
         );
         Long id = jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
@@ -196,8 +204,10 @@ public class PersistentPerformanceService {
                 """,
                 normalizeBlockType(str(payload, "blockType", str(payload, "type", "PARAGRAPH"))),
                 str(payload, "title", ""),
-                str(payload, "content", ""),
-                str(payload, "imagePath", ""),
+                "IMAGE".equals(normalizeBlockType(str(payload, "blockType", str(payload, "type", "PARAGRAPH"))))
+                        ? persistImagePath(str(payload, "content", str(payload, "imagePath", "")))
+                        : str(payload, "content", ""),
+                persistImagePath(str(payload, "imagePath", str(payload, "content", ""))),
                 intValue(payload, "sortOrder", 1),
                 blockId
         );
@@ -243,9 +253,9 @@ public class PersistentPerformanceService {
                 longValue(payload, "venueId", null),
                 str(payload, "venue", str(payload, "venueName", "")),
                 str(payload, "address", ""),
-                str(payload, "poster", str(payload, "posterPath", "")),
-                str(payload, "banner", str(payload, "bannerPath", str(payload, "poster", ""))),
-                str(payload, "detailImage", str(payload, "detailImagePath", "")),
+                persistImagePath(str(payload, "poster", str(payload, "posterPath", ""))),
+                persistImagePath(str(payload, "banner", str(payload, "bannerPath", str(payload, "poster", "")))),
+                persistImagePath(str(payload, "detailImage", str(payload, "detailImagePath", ""))),
                 decimalValue(payload, "priceMin", BigDecimal.ZERO),
                 decimalValue(payload, "priceMax", BigDecimal.ZERO),
                 str(payload, "summary", ""),
@@ -400,6 +410,32 @@ public class PersistentPerformanceService {
     private List<String> splitTags(String value) {
         if (value == null || value.isBlank()) return List.of();
         return Arrays.stream(value.split(",")).map(String::trim).filter(item -> !item.isBlank()).toList();
+    }
+
+    private String persistImagePath(String value) {
+        String path = value == null ? "" : value.trim();
+        if ((path.startsWith("\"") && path.endsWith("\"")) || (path.startsWith("'") && path.endsWith("'"))) {
+            path = path.substring(1, path.length() - 1);
+        }
+        if (path.isBlank() || path.startsWith("/uploads/") || path.startsWith("http://") || path.startsWith("https://")) {
+            return path;
+        }
+        try {
+            Path source = Paths.get(path).normalize();
+            if (!Files.isRegularFile(source)) return path;
+            String originalName = source.getFileName().toString();
+            String suffix = "";
+            int dot = originalName.lastIndexOf('.');
+            if (dot >= 0) suffix = originalName.substring(dot).toLowerCase(Locale.ROOT);
+            if (!List.of(".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg").contains(suffix)) suffix = ".jpg";
+            Path dir = Paths.get("..", "uploads", "admin").normalize();
+            Files.createDirectories(dir);
+            Path target = dir.resolve(UUID.randomUUID().toString().replace("-", "") + suffix);
+            Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return "/uploads/admin/" + target.getFileName();
+        } catch (IOException | RuntimeException ignored) {
+            return path;
+        }
     }
 
     private Long longOrNull(ResultSet rs, String column) throws SQLException {

@@ -50,6 +50,7 @@ const load = async () => {
     const data = await searchPerformances(form)
     items.value = data.items
     total.value = data.total
+    cities.splice(0, cities.length, ...(data.filters?.cities || cities))
   } catch (error) {
     ElMessage.error(error.message)
   }
