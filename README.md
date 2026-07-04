@@ -1,17 +1,6 @@
-# 基于 Spring Boot + Vue 的综合票务抢票与电子票核验系统
+# TicketMarket 票务演示系统
 
-系统是课程设计实习演示系统，定位为自建演出票务平台。系统只用于本机和局域网演示，不爬取真实票务平台，不接入真实支付，不抓真实库存、真实订单或真实选座接口。
-
-## 当前能力
-
-系统已覆盖课程演示所需的完整票务链路：
-
-- 用户登录、实名状态、观演人管理、个人中心、订单、票夹、站内信
-- 首页、分类、搜索、演出详情、电影详情、场次、票档、图形化选座
-- 场馆、区域、座位模板、场次、票档、售票批次、库存池
-- 抢票提交、Redis 防超卖、选座锁座、订单、模拟支付、自动出票
-- 退票申请与审核、库存回流或入池、检票核验、统计、操作日志、风控日志
-- ADMIN / MANAGER / CHECKER / USER 分角色权限控制
+基于 Spring Boot + Vue 3 的课程项目，覆盖演出发布、场馆座位、开售批次、抢票、订单、支付、出票、退票和检票流程。系统只用于本机或局域网演示，不接入真实票务平台和真实支付。
 
 ## 环境要求
 
@@ -19,57 +8,44 @@
 - Java 17
 - Maven 3.8+
 - Node.js 18+
-- MySQL 8.x
 - Docker Desktop
+- MySQL 8.x 容器：`mysql-ticket`
 - Redis 容器：`redis-ticket`
 
-## Redis 启动与检查
+## MySQL
 
-README 保留指定 Redis 启动命令：
+课程项目使用 MySQL 持久化后台发布数据和票务状态。
 
-```bash
-docker run -d --name redis-ticket -p 6379:6379 redis:latest
-```
+默认配置：
 
-README 保留指定 Redis 检查命令：
+- 容器名：`mysql-ticket`
+- 数据库名：`ticket_market`
+- 用户：`root`
+- 密码：`root`
+- 端口：`3306`
 
-```bash
-docker exec -it redis-ticket redis-cli ping
-```
-
-返回 `PONG` 即可。后端配置为：
-
-```yaml
-spring:
-  data:
-    redis:
-      host: localhost
-      port: 6379
-```
-
-## MySQL 初始化
-
-默认数据库名：`ticket_market`。
-
-```bash
-mysql -uroot -p < data/schema.sql
-```
-
-默认 `backend/src/main/resources/application.yml` 使用：
-
-```yaml
-spring.datasource.url: jdbc:mysql://localhost:3306/ticket_market
-spring.datasource.username: root
-spring.datasource.password: root
-```
-
-如果你的本地 MySQL 密码不是 `root`，请修改 `application.yml`。当前演示数据以内置数据为主，MySQL 表结构用于课程设计说明和后续持久化扩展。
-
-可选 Docker MySQL：
+启动 MySQL：
 
 ```bash
 docker run -d --name mysql-ticket -p 3306:3306 -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=ticket_market mysql:8.0
 ```
+
+导入表结构：
+
+```bash
+docker exec -i mysql-ticket mysql -uroot -proot ticket_market < data/schema.sql
+```
+
+后端启动时也会执行轻量字段补齐，避免旧库缺少演出发布字段。
+
+## Redis
+
+```bash
+docker run -d --name redis-ticket -p 6379:6379 redis:latest
+docker exec -it redis-ticket redis-cli ping
+```
+
+返回 `PONG` 即可。Redis 用于抢票阶段的实时批次库存；MySQL 保存场次、批次、票档、订单和最终状态。后端重启后可根据 MySQL 批次和票档重新初始化 Redis 库存。
 
 ## 后端启动
 
@@ -78,10 +54,12 @@ cd backend
 mvn spring-boot:run
 ```
 
-接口文档：
+构建：
 
-- Knife4j: `http://localhost:8080/doc.html`
-- OpenAPI: `http://localhost:8080/v3/api-docs`
+```bash
+cd backend
+mvn -q -DskipTests package
+```
 
 ## 前端启动
 
@@ -91,57 +69,62 @@ npm install
 npm run dev
 ```
 
-Vite 已配置：
-
-```js
-server: {
-  host: '0.0.0.0',
-  port: 5173
-}
-```
-
-## 局域网访问方法
-
-1. 查询 Windows 局域网 IP，例如 `192.168.1.23`。
-2. 前端默认会根据当前访问地址自动推导后端地址：
+构建：
 
 ```bash
-http://当前访问主机:8080/api
+cd frontend
+npm run build
 ```
 
-3. 如需手动指定，可在 `frontend/.env.local` 配置完整 API 地址，例如：
+## 持久化范围
 
-```bash
-VITE_API_BASE_URL=http://192.168.1.23:8080/api
+以下后台数据写入 MySQL，后端重启后仍然存在：
+
+- 演出档案：标题、分类、城市、场馆、海报、价格、发布状态、购票须知等。
+- 演出详情块：标题、段落、图片和排序。
+- 场馆、区域、座位图。
+- 场次、票档、开售批次、库存池。
+- 订单、支付记录、电子票、退票申请、检票记录。
+
+`DemoDataService` 仅保留账号、电影和初始化演示数据来源。启动时如果 MySQL 业务表为空，会导入演示数据；如果已有管理员数据，不会清空或覆盖。
+
+## 图片上传
+
+后台图片上传接口：
+
+```text
+POST /api/admin/upload/image
 ```
 
-4. 后端启动在 `0.0.0.0:8080` 可被局域网前端访问，CORS 已允许常见局域网网段。
-5. 演示设备浏览器访问：`http://192.168.1.23:5173`。
-6. 局域网其他设备仅作为普通用户访问门户、详情、购票、订单和票夹；后台账号只允许在服务器本机通过 `localhost` 或 `127.0.0.1` 登录，`/api/admin/**` 与 `/api/checker/**` 在非本机 Host 下会被拒绝。
+图片保存到仓库外层 `uploads/admin/` 目录，返回相对路径，例如：
 
-## 账号说明
+```text
+/uploads/admin/xxxxxxxx.jpg
+```
 
-系统包含系统管理员、票务管理员、检票员和普通用户四类角色。课堂演示或本机验收时，请使用交付说明中提供的本地账号；后台角色仅允许在服务器本机通过 `localhost` 或 `127.0.0.1` 登录。
+演出保存时只写入相对路径，不写死 `localhost`，因此局域网访问时浏览器会按当前后端主机加载 `/uploads/**` 静态资源。
 
-## 数据来源说明
+## 后台账号
 
-- 演出、电影、场馆、场次、票档均为本地虚构数据。
-- `data/sample_performances.csv` 和 `data/sample_movies.csv` 提供后续导入模板。
-- 当前海报、轮播图和详情图由 `scripts/generate_local_assets.py` 在本地生成，路径位于 `uploads/` 与 `frontend/public/uploads/`。
-- 不从真实票务平台下载图片、库存、订单或选座数据。
+后台账号只允许通过服务端本机 `localhost` 或 `127.0.0.1` 登录。
 
-## 前台业务规则
+- `admin / admin123`
+- `manager / manager123`
+- `checker / checker123`
 
-- 未到开售时间：用户可提交预约抢票，不生成订单、不扣库存、不锁座。
-- 正在售卖且有库存：用户可立即购票或进入选座。
-- 正在售卖但无库存：前台显示缺货中，按钮禁用。
-- 售卖结束：前台显示已结束或暂不可售。
-- 前台不展示锁票时间、开放库存数量、批次编号、Redis key 等内部信息。
+## 主要接口
 
-## UI 参考边界
+- `GET /api/admin/performances`
+- `POST /api/admin/performances`
+- `PUT /api/admin/performances/{id}`
+- `PUT /api/admin/performances/{id}/publish`
+- `PUT /api/admin/performances/{id}/offline`
+- `GET /api/admin/performances/{id}/detail-blocks`
+- `POST /api/admin/performances/{id}/detail-blocks`
+- `PUT /api/admin/performance-detail-blocks/{blockId}`
+- `PUT /api/admin/performances/{id}/detail-blocks/reorder`
+- `GET /api/portal/search`
+- `GET /api/portal/performances/{id}`
+- `GET /api/portal/performances/{id}/sessions`
 
-页面优化只参考用户提供截图中的布局、字号、间距、层级、卡片比例和按钮位置规律；项目未复制截图中的海报、Logo、二维码、品牌文案或真实平台素材。
-
-## 合规说明
-
-系统不爬取大麦、猫眼、淘票票等真实票务平台；不访问需要登录的页面；不绕过验证码、签名、反爬、风控或隐藏接口；不接入真实微信/支付宝支付；不接入短信或邮箱；不做公网部署。
+前台只展示 `publish_status = PUBLISHED` 且未删除的演出；草稿和下架演出后台可见，前台不可见。

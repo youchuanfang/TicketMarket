@@ -2,11 +2,17 @@ package com.ticketmarket.service;
 
 import com.ticketmarket.common.ApiException;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -15,138 +21,170 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Service
+@DependsOn("databaseSchemaInitializer")
 public class Phase3ResourceService {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    private final JdbcTemplate jdbcTemplate;
     private final StringRedisTemplate redisTemplate;
-    private final AtomicLong venueId = new AtomicLong(3);
-    private final AtomicLong areaId = new AtomicLong(10);
-    private final AtomicLong seatId = new AtomicLong(10000);
-    private final AtomicLong sessionSeatId = new AtomicLong(30000);
-    private final AtomicLong sessionId = new AtomicLong(1003);
-    private final AtomicLong ticketLevelId = new AtomicLong(2004);
-    private final AtomicLong batchId = new AtomicLong(3003);
-    private final AtomicLong poolId = new AtomicLong(4003);
 
-    private final List<Map<String, Object>> venues = new ArrayList<>();
-    private final List<Map<String, Object>> areas = new ArrayList<>();
-    private final List<Map<String, Object>> seats = new ArrayList<>();
-    private final List<Map<String, Object>> sessionSeats = new ArrayList<>();
-    private final List<Map<String, Object>> sessions = new ArrayList<>();
-    private final List<Map<String, Object>> ticketLevels = new ArrayList<>();
-    private final List<Map<String, Object>> saleBatches = new ArrayList<>();
-    private final List<Map<String, Object>> batchTicketLevels = new ArrayList<>();
-    private final List<Map<String, Object>> batchSeats = new ArrayList<>();
-    private final List<Map<String, Object>> stockPool = new ArrayList<>();
-
-    public Phase3ResourceService(StringRedisTemplate redisTemplate) {
+    public Phase3ResourceService(JdbcTemplate jdbcTemplate, StringRedisTemplate redisTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
     }
 
     @PostConstruct
-    public void init() {
-        seedVenues();
-        seedAreas();
-        seedSeats();
-        seedSessions();
-        seedTicketLevels();
-        seedBatches();
-        initSessionSeats(1001L);
-        initSessionSeats(1002L);
-        initSessionSeats(1003L);
+    @Transactional
+    public void seedIfEmpty() {
+        Integer venueCount = jdbcTemplate.queryForObject("select count(*) from venue where deleted = 0", Integer.class);
+        if (venueCount == null || venueCount == 0) {
+            seedVenues();
+            seedAreas();
+            seedSeats();
+        }
+        Integer sessionCount = jdbcTemplate.queryForObject("select count(*) from performance_session where deleted = 0", Integer.class);
+        if (sessionCount == null || sessionCount == 0) {
+            seedSessions();
+            seedTicketLevels();
+            seedBatches();
+            initSessionSeats(1001L);
+            initSessionSeats(1002L);
+            initSessionSeats(1003L);
+        }
+        refreshBatchStatus();
     }
 
     public List<Map<String, Object>> venues() {
-        return copyList(venues);
+        return rows("""
+                select id, city_id cityId, city_name cityName, name, address, capacity, description, status,
+                       created_at createdAt, updated_at updatedAt
+                from venue where deleted = 0 order by id
+                """);
     }
 
     public List<Map<String, Object>> hotVenues() {
-        return venues.stream().filter(item -> "ENABLED".equals(item.get("status"))).limit(6).map(this::copy).toList();
+        return rows("""
+                select id, city_id cityId, city_name cityName, name, address, capacity, description, status,
+                       created_at createdAt, updated_at updatedAt
+                from venue where deleted = 0 and status = 'ENABLED' order by id limit 6
+                """);
     }
 
     public Map<String, Object> venue(Long id) {
-        return copy(find(venues, id, "场馆不存在"));
+        return one("""
+                select id, city_id cityId, city_name cityName, name, address, capacity, description, status,
+                       created_at createdAt, updated_at updatedAt
+                from venue where id = ? and deleted = 0
+                """, "场馆不存在", id);
     }
 
     public Map<String, Object> createVenue(Map<String, Object> payload) {
-        Map<String, Object> venue = map(
-                "id", venueId.incrementAndGet(),
-                "name", str(payload, "name", "新场馆"),
-                "cityId", longValue(payload, "cityId", 1L),
-                "cityName", str(payload, "cityName", "上海"),
-                "address", str(payload, "address", "待完善地址"),
-                "capacity", intValue(payload, "capacity", 0),
-                "description", str(payload, "description", "场馆信息待完善"),
-                "status", "ENABLED",
-                "createdAt", now(),
-                "updatedAt", now()
+        jdbcTemplate.update("""
+                insert into venue (city_id, city_name, name, address, intro, description, capacity, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
+                """,
+                longValue(payload, "cityId", 1L),
+                str(payload, "cityName", "上海"),
+                str(payload, "name", "新场馆"),
+                str(payload, "address", "待完善地址"),
+                str(payload, "description", "场馆信息待完善"),
+                str(payload, "description", "场馆信息待完善"),
+                intValue(payload, "capacity", 0)
         );
-        venues.add(venue);
-        return copy(venue);
+        return venue(lastId());
     }
 
     public Map<String, Object> updateVenue(Long id, Map<String, Object> payload) {
-        Map<String, Object> venue = find(venues, id, "场馆不存在");
-        merge(venue, payload, "name", "cityName", "address", "capacity", "description", "status");
-        venue.put("updatedAt", now());
-        return copy(venue);
+        findVenue(id);
+        jdbcTemplate.update("""
+                update venue set name=?, city_name=?, address=?, capacity=?, intro=?, description=?, status=?, updated_at=now()
+                where id=? and deleted=0
+                """,
+                str(payload, "name", ""),
+                str(payload, "cityName", ""),
+                str(payload, "address", ""),
+                intValue(payload, "capacity", 0),
+                str(payload, "description", ""),
+                str(payload, "description", ""),
+                str(payload, "status", "ENABLED"),
+                id
+        );
+        return venue(id);
     }
 
     public void deleteVenue(Long id) {
-        find(venues, id, "场馆不存在").put("status", "DISABLED");
+        jdbcTemplate.update("update venue set status='DISABLED', updated_at=now() where id=? and deleted=0", id);
     }
 
     public List<Map<String, Object>> areas(Long venueId) {
-        return areas.stream().filter(item -> Objects.equals(item.get("venueId"), venueId)).map(this::copy).toList();
+        return rows("""
+                select id, venue_id venueId, name areaName, area_type areaType, default_ticket_level defaultTicketLevel,
+                       sort_order sortOrder, color, status, created_at createdAt, updated_at updatedAt
+                from venue_area where venue_id = ? and deleted = 0 order by sort_order, id
+                """, venueId);
     }
 
     public Map<String, Object> createArea(Long venueId, Map<String, Object> payload) {
-        Map<String, Object> area = map(
-                "id", areaId.incrementAndGet(),
-                "venueId", venueId,
-                "areaName", str(payload, "areaName", "新区"),
-                "areaType", str(payload, "areaType", "SEATED"),
-                "defaultTicketLevel", str(payload, "defaultTicketLevel", "标准票"),
-                "sortOrder", intValue(payload, "sortOrder", 1),
-                "color", str(payload, "color", "#d9303e"),
-                "status", "ENABLED",
-                "createdAt", now(),
-                "updatedAt", now()
+        findVenue(venueId);
+        jdbcTemplate.update("""
+                insert into venue_area
+                (venue_id, name, area_type, default_ticket_level, sort_order, color, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
+                """,
+                venueId,
+                str(payload, "areaName", "新区"),
+                str(payload, "areaType", "SEATED"),
+                str(payload, "defaultTicketLevel", "标准票"),
+                intValue(payload, "sortOrder", 1),
+                str(payload, "color", "#d9303e")
         );
-        areas.add(area);
-        return copy(area);
+        return area(lastId());
     }
 
     public Map<String, Object> updateArea(Long id, Map<String, Object> payload) {
-        Map<String, Object> area = find(areas, id, "区域不存在");
-        merge(area, payload, "areaName", "areaType", "defaultTicketLevel", "sortOrder", "color", "status");
-        area.put("updatedAt", now());
-        return copy(area);
+        area(id);
+        jdbcTemplate.update("""
+                update venue_area set name=?, area_type=?, default_ticket_level=?, sort_order=?, color=?, status=?, updated_at=now()
+                where id=? and deleted=0
+                """,
+                str(payload, "areaName", ""),
+                str(payload, "areaType", "SEATED"),
+                str(payload, "defaultTicketLevel", "标准票"),
+                intValue(payload, "sortOrder", 1),
+                str(payload, "color", "#d9303e"),
+                str(payload, "status", "ENABLED"),
+                id
+        );
+        return area(id);
     }
 
     public void deleteArea(Long id) {
-        find(areas, id, "区域不存在").put("status", "DISABLED");
+        jdbcTemplate.update("update venue_area set status='DISABLED', deleted=1, updated_at=now() where id=?", id);
     }
 
     public List<Map<String, Object>> seats(Long venueId) {
-        return seats.stream().filter(item -> Objects.equals(item.get("venueId"), venueId)).map(this::copy).toList();
+        return rows("""
+                select s.id, s.venue_id venueId, s.area_id areaId, s.row_no rowNo, s.seat_no seatNo,
+                       s.seat_label seatLabel, s.x, s.y, s.is_aisle isAisle, s.is_disabled isDisabled,
+                       s.status, s.created_at createdAt, s.updated_at updatedAt
+                from seat s where s.venue_id = ? and s.deleted = 0 order by s.area_id, s.y, s.x, s.id
+                """, venueId);
     }
 
     public List<Map<String, Object>> generateSeats(Long venueId, Map<String, Object> payload) {
         Long targetAreaId = longValue(payload, "areaId", null);
         if (targetAreaId == null) {
-            Map<String, Object> area = createArea(venueId, map(
+            targetAreaId = (Long) createArea(venueId, map(
                     "areaName", str(payload, "areaName", "A区"),
                     "areaType", "SEATED",
                     "defaultTicketLevel", "标准票",
                     "color", str(payload, "areaColor", "#d9303e")
-            ));
-            targetAreaId = (Long) area.get("id");
+            )).get("id");
         }
-        String areaName = String.valueOf(find(areas, targetAreaId, "区域不存在").get("areaName"));
+        Map<String, Object> area = area(targetAreaId);
+        String areaName = String.valueOf(area.get("areaName"));
         int rowStart = intValue(payload, "rowStart", 1);
         int rowEnd = intValue(payload, "rowEnd", rowStart);
         int seatsPerRow = intValue(payload, "seatsPerRow", 12);
@@ -160,340 +198,359 @@ public class Phase3ResourceService {
             for (int number = 1; number <= seatsPerRow; number++) {
                 int currentNumber = number;
                 int aisleOffset = (int) aisles.stream().filter(value -> currentNumber > value).count() * gapX;
-                Map<String, Object> seat = map(
-                        "id", seatId.incrementAndGet(),
-                        "venueId", venueId,
-                        "areaId", targetAreaId,
-                        "rowNo", String.valueOf(row),
-                        "seatNo", String.valueOf(number),
-                        "seatLabel", areaName + "-" + row + "排-" + number + "座",
-                        "x", startX + (number - 1) * gapX + aisleOffset,
-                        "y", startY + (row - rowStart) * gapY,
-                        "isAisle", aisles.contains(number),
-                        "isDisabled", false,
-                        "status", "AVAILABLE",
-                        "createdAt", now(),
-                        "updatedAt", now()
+                jdbcTemplate.update("""
+                        insert into seat
+                        (venue_id, area_id, row_no, seat_no, seat_label, x, y, is_aisle, is_disabled, status, created_at, updated_at, deleted)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, 0, 'AVAILABLE', now(), now(), 0)
+                        """,
+                        venueId, targetAreaId, String.valueOf(row), String.valueOf(number),
+                        areaName + "-" + row + "排" + number + "座",
+                        startX + (number - 1) * gapX + aisleOffset,
+                        startY + (row - rowStart) * gapY,
+                        aisles.contains(number)
                 );
-                seats.add(seat);
-                generated.add(copy(seat));
+                generated.add(seat(lastId()));
             }
         }
         return generated;
     }
 
     public Map<String, Object> updateSeat(Long id, Map<String, Object> payload) {
-        Map<String, Object> seat = find(seats, id, "座位不存在");
-        merge(seat, payload, "x", "y", "isAisle", "isDisabled", "status");
-        seat.put("updatedAt", now());
-        return copy(seat);
+        seat(id);
+        jdbcTemplate.update("""
+                update seat set x=?, y=?, is_aisle=?, is_disabled=?, status=?, updated_at=now()
+                where id=? and deleted=0
+                """,
+                intValue(payload, "x", 0),
+                intValue(payload, "y", 0),
+                boolValue(payload, "isAisle", false),
+                boolValue(payload, "isDisabled", false),
+                str(payload, "status", "AVAILABLE"),
+                id
+        );
+        return seat(id);
     }
 
     public void batchSeatDisabled(List<Long> ids, boolean disabled) {
-        seats.stream().filter(item -> ids.contains((Long) item.get("id"))).forEach(item -> {
-            item.put("isDisabled", disabled);
-            item.put("status", disabled ? "DISABLED" : "AVAILABLE");
-            item.put("updatedAt", now());
-        });
+        if (ids == null || ids.isEmpty()) return;
+        String in = placeholders(ids.size());
+        List<Object> args = new ArrayList<>();
+        args.add(disabled);
+        args.add(disabled ? "DISABLED" : "AVAILABLE");
+        args.addAll(ids);
+        jdbcTemplate.update("update seat set is_disabled=?, status=?, updated_at=now() where id in (" + in + ")", args.toArray());
     }
 
     public List<Map<String, Object>> sessions() {
-        return copyList(sessions);
+        refreshBatchStatus();
+        return rows(sessionSelect() + " where ps.deleted = 0 order by ps.start_time, ps.id");
     }
 
     public Map<String, Object> session(Long id) {
-        return copy(find(sessions, id, "场次不存在"));
+        return one(sessionSelect() + " where ps.id = ? and ps.deleted = 0", "场次不存在", id);
     }
 
     public List<Map<String, Object>> sessionsByPerformance(Long performanceId) {
-        return sessions.stream().filter(item -> Objects.equals(item.get("performanceId"), performanceId)).map(this::copy).toList();
+        return rows(sessionSelect() + " where ps.performance_id = ? and ps.deleted = 0 order by ps.start_time, ps.id", performanceId);
     }
 
     public Map<String, Object> createSession(Map<String, Object> payload) {
-        Map<String, Object> session = map(
-                "id", sessionId.incrementAndGet(),
-                "performanceId", longValue(payload, "performanceId", 101L),
-                "venueId", longValue(payload, "venueId", 1L),
-                "sessionName", str(payload, "sessionName", "新增场次"),
-                "saleStartTime", str(payload, "saleStartTime", "2026-07-20 10:00:00"),
-                "lockTime", str(payload, "lockTime", "2026-08-01 18:00:00"),
-                "entryTime", str(payload, "entryTime", "2026-08-18 18:00:00"),
-                "startTime", str(payload, "startTime", "2026-08-18 19:30:00"),
-                "endTime", str(payload, "endTime", "2026-08-18 22:00:00"),
-                "purchaseMode", str(payload, "purchaseMode", "SELECTABLE"),
-                "status", "SCHEDULED",
-                "createdAt", now(),
-                "updatedAt", now()
+        jdbcTemplate.update("""
+                insert into performance_session
+                (performance_id, venue_id, session_name, hall_name, sale_start_time, lock_time, entry_time, start_time, end_time,
+                 sale_mode, purchase_mode, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', now(), now(), 0)
+                """,
+                longValue(payload, "performanceId", 101L),
+                longValue(payload, "venueId", 1L),
+                str(payload, "sessionName", "新增场次"),
+                str(payload, "sessionName", "新增场次"),
+                timeValue(payload, "saleStartTime", "2026-07-20 10:00:00"),
+                timeValue(payload, "lockTime", "2026-08-01 18:00:00"),
+                timeValue(payload, "entryTime", "2026-08-18 18:00:00"),
+                timeValue(payload, "startTime", "2026-08-18 19:30:00"),
+                timeValue(payload, "endTime", "2026-08-18 22:00:00"),
+                str(payload, "purchaseMode", "SELECTABLE"),
+                str(payload, "purchaseMode", "SELECTABLE")
         );
-        sessions.add(session);
-        return copy(session);
+        return session(lastId());
     }
 
     public Map<String, Object> updateSession(Long id, Map<String, Object> payload) {
-        Map<String, Object> session = find(sessions, id, "场次不存在");
-        merge(session, payload, "sessionName", "saleStartTime", "lockTime", "entryTime", "startTime", "endTime", "purchaseMode", "status");
-        session.put("updatedAt", now());
-        return copy(session);
+        session(id);
+        jdbcTemplate.update("""
+                update performance_session
+                set performance_id=?, venue_id=?, session_name=?, hall_name=?, sale_start_time=?, lock_time=?, entry_time=?,
+                    start_time=?, end_time=?, sale_mode=?, purchase_mode=?, status=?, updated_at=now()
+                where id=? and deleted=0
+                """,
+                longValue(payload, "performanceId", null),
+                longValue(payload, "venueId", null),
+                str(payload, "sessionName", ""),
+                str(payload, "sessionName", ""),
+                timeValue(payload, "saleStartTime", "2026-07-20 10:00:00"),
+                timeValue(payload, "lockTime", "2026-08-01 18:00:00"),
+                timeValue(payload, "entryTime", "2026-08-18 18:00:00"),
+                timeValue(payload, "startTime", "2026-08-18 19:30:00"),
+                timeValue(payload, "endTime", "2026-08-18 22:00:00"),
+                str(payload, "purchaseMode", "SELECTABLE"),
+                str(payload, "purchaseMode", "SELECTABLE"),
+                str(payload, "status", "SCHEDULED"),
+                id
+        );
+        return session(id);
     }
 
     public void deleteSession(Long id) {
-        find(sessions, id, "场次不存在").put("status", "CANCELLED");
+        jdbcTemplate.update("update performance_session set status='CANCELLED', deleted=1, updated_at=now() where id=?", id);
     }
 
     public List<Map<String, Object>> ticketLevels(Long sessionId) {
-        return ticketLevels.stream().filter(item -> Objects.equals(item.get("sessionId"), sessionId)).map(this::copy).toList();
+        return rows(ticketLevelSelect() + " where tl.session_id = ? and tl.deleted = 0 order by tl.price, tl.id", sessionId);
     }
 
     public List<Map<String, Object>> frontTicketLevels(Long sessionId) {
         Map<String, Object> saleStatus = frontSaleStatus(sessionId);
         String status = String.valueOf(saleStatus.get("status"));
-        return ticketLevels.stream()
-                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                .map(item -> {
-                    Map<String, Object> row = copy(item);
-                    row.put("frontStatus", ticketLevelFrontStatus(row, status));
-                    return row;
-                })
-                .toList();
+        return ticketLevels(sessionId).stream().peek(row -> row.put("frontStatus", ticketLevelFrontStatus(row, status))).toList();
     }
 
     public Map<String, Object> ticketLevel(Long id) {
-        return copy(find(ticketLevels, id, "票档不存在"));
+        return one(ticketLevelSelect() + " where tl.id = ? and tl.deleted = 0", "票档不存在", id);
     }
 
     public Map<String, Object> createTicketLevel(Map<String, Object> payload) {
-        Map<String, Object> level = map(
-                "id", ticketLevelId.incrementAndGet(),
-                "sessionId", longValue(payload, "sessionId", 1001L),
-                "name", str(payload, "name", "标准票"),
-                "price", decimalValue(payload, "price", "180"),
-                "areaId", longValue(payload, "areaId", 1L),
-                "totalStock", intValue(payload, "totalStock", 0),
-                "releasedStock", intValue(payload, "releasedStock", 0),
-                "unreleasedStock", intValue(payload, "unreleasedStock", 0),
-                "soldStock", 0,
-                "lockedStock", 0,
-                "refundedStock", 0,
-                "status", "ENABLED",
-                "createdAt", now(),
-                "updatedAt", now()
+        int totalStock = intValue(payload, "totalStock", 0);
+        int releasedStock = intValue(payload, "releasedStock", 0);
+        jdbcTemplate.update("""
+                insert into ticket_level
+                (session_id, name, area_id, price, total_stock, released_stock, unreleased_stock, sold_stock,
+                 locked_stock, refunded_stock, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'ENABLED', now(), now(), 0)
+                """,
+                longValue(payload, "sessionId", 1001L),
+                str(payload, "name", "标准票"),
+                longValue(payload, "areaId", null),
+                decimalValue(payload, "price", "180"),
+                totalStock,
+                releasedStock,
+                intValue(payload, "unreleasedStock", Math.max(0, totalStock - releasedStock))
         );
-        ticketLevels.add(level);
-        return copy(level);
+        return ticketLevel(lastId());
     }
 
     public Map<String, Object> updateTicketLevel(Long id, Map<String, Object> payload) {
-        Map<String, Object> level = find(ticketLevels, id, "票档不存在");
-        merge(level, payload, "name", "price", "areaId", "totalStock", "releasedStock", "unreleasedStock", "status");
-        level.put("updatedAt", now());
-        return copy(level);
+        ticketLevel(id);
+        jdbcTemplate.update("""
+                update ticket_level set name=?, area_id=?, price=?, total_stock=?, released_stock=?, unreleased_stock=?, status=?, updated_at=now()
+                where id=? and deleted=0
+                """,
+                str(payload, "name", ""),
+                longValue(payload, "areaId", null),
+                decimalValue(payload, "price", "180"),
+                intValue(payload, "totalStock", 0),
+                intValue(payload, "releasedStock", 0),
+                intValue(payload, "unreleasedStock", 0),
+                str(payload, "status", "ENABLED"),
+                id
+        );
+        return ticketLevel(id);
     }
 
     public void deleteTicketLevel(Long id) {
-        find(ticketLevels, id, "票档不存在").put("status", "DISABLED");
+        jdbcTemplate.update("update ticket_level set status='DISABLED', deleted=1, updated_at=now() where id=?", id);
     }
 
     public List<Map<String, Object>> sessionSeats(Long sessionId) {
-        return sessionSeats.stream().filter(item -> Objects.equals(item.get("sessionId"), sessionId)).map(this::copy).toList();
+        return rows("""
+                select id, session_id sessionId, seat_id seatId, venue_id venueId, area_id areaId, ticket_level_id ticketLevelId,
+                       batch_id batchId, status, lock_user_id lockUserId, lock_expire_time lockExpireTime,
+                       seat_label seatLabel, x, y, created_at createdAt, updated_at updatedAt
+                from session_seat where session_id = ? order by y, x, id
+                """, sessionId);
     }
 
     public List<Map<String, Object>> initSessionSeats(Long sessionId) {
-        Map<String, Object> session = find(sessions, sessionId, "场次不存在");
-        Long venueId = (Long) session.get("venueId");
-        if (sessionSeats.stream().anyMatch(item -> Objects.equals(item.get("sessionId"), sessionId))) {
-            return sessionSeats(sessionId);
-        }
+        Map<String, Object> targetSession = session(sessionId);
+        Long venueId = (Long) targetSession.get("venueId");
+        Integer count = jdbcTemplate.queryForObject("select count(*) from session_seat where session_id=?", Integer.class, sessionId);
+        if (count != null && count > 0) return sessionSeats(sessionId);
         List<Map<String, Object>> levels = ticketLevels(sessionId);
-        List<Map<String, Object>> venueSeats = seats(venueId);
-        for (Map<String, Object> seat : venueSeats) {
+        for (Map<String, Object> seat : seats(venueId)) {
             Long areaId = (Long) seat.get("areaId");
             Long levelId = levels.stream()
                     .filter(level -> Objects.equals(level.get("areaId"), areaId))
                     .map(level -> (Long) level.get("id"))
                     .findFirst()
                     .orElse(levels.isEmpty() ? null : (Long) levels.get(0).get("id"));
-            Map<String, Object> sessionSeat = map(
-                    "id", sessionSeatId.incrementAndGet(),
-                    "sessionId", sessionId,
-                    "seatId", seat.get("id"),
-                    "venueId", venueId,
-                    "areaId", areaId,
-                    "ticketLevelId", levelId,
-                    "batchId", null,
-                    "status", Boolean.TRUE.equals(seat.get("isDisabled")) ? "DISABLED" : "AVAILABLE",
-                    "lockUserId", null,
-                    "lockExpireTime", null,
-                    "seatLabel", seat.get("seatLabel"),
-                    "x", seat.get("x"),
-                    "y", seat.get("y"),
-                    "createdAt", now(),
-                    "updatedAt", now()
+            jdbcTemplate.update("""
+                    insert into session_seat
+                    (session_id, seat_id, venue_id, area_id, ticket_level_id, batch_id, status, lock_user_id,
+                     lock_expire_time, seat_label, x, y, created_at, updated_at)
+                    values (?, ?, ?, ?, ?, null, ?, null, null, ?, ?, ?, now(), now())
+                    """,
+                    sessionId, seat.get("id"), venueId, areaId, levelId,
+                    Boolean.TRUE.equals(seat.get("isDisabled")) ? "DISABLED" : "AVAILABLE",
+                    seat.get("seatLabel"), seat.get("x"), seat.get("y")
             );
-            sessionSeats.add(sessionSeat);
         }
         return sessionSeats(sessionId);
     }
 
     public void updateSessionSeatStatus(List<Long> ids, String status) {
-        sessionSeats.stream().filter(item -> ids.contains((Long) item.get("id"))).forEach(item -> {
-            item.put("status", status);
-            item.put("updatedAt", now());
-        });
+        if (ids == null || ids.isEmpty()) return;
+        jdbcTemplate.update("update session_seat set status=?, updated_at=now() where id in (" + placeholders(ids.size()) + ")", args(status, ids));
     }
 
     public synchronized List<Map<String, Object>> lockSessionSeats(Long sessionId, List<Long> ids, Long userId, Long batchId, int minutes) {
-        if (ids == null || ids.isEmpty()) {
-            return List.of();
-        }
-        List<Map<String, Object>> targets = sessionSeats.stream()
-                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                .filter(item -> ids.contains((Long) item.get("id")))
-                .toList();
-        if (targets.size() != ids.size()) {
-            throw new ApiException(404, "部分座位不存在");
-        }
+        if (ids == null || ids.isEmpty()) return List.of();
+        List<Map<String, Object>> targets = rows("select id, status from session_seat where session_id=? and id in (" + placeholders(ids.size()) + ")", prepend(sessionId, ids));
+        if (targets.size() != ids.size()) throw new ApiException(404, "部分座位不存在");
         if (targets.stream().anyMatch(item -> !"AVAILABLE".equals(item.get("status")))) {
             throw new ApiException(409, "所选座位已被占用，请重新选择");
         }
         String expireTime = FORMATTER.format(LocalDateTime.now().plusMinutes(minutes));
-        targets.forEach(item -> {
-            item.put("status", "LOCKED");
-            item.put("batchId", batchId);
-            item.put("lockUserId", userId);
-            item.put("lockExpireTime", expireTime);
-            item.put("updatedAt", now());
-        });
-        return targets.stream().map(this::copy).toList();
+        List<Object> args = new ArrayList<>();
+        args.add(batchId);
+        args.add(userId);
+        args.add(Timestamp.valueOf(parseTime(expireTime)));
+        args.addAll(ids);
+        jdbcTemplate.update("update session_seat set status='LOCKED', batch_id=?, lock_user_id=?, lock_expire_time=?, updated_at=now() where id in (" + placeholders(ids.size()) + ")", args.toArray());
+        return rows("select * from (" + sessionSeatSelect() + ") t where t.id in (" + placeholders(ids.size()) + ")", ids.toArray());
     }
 
     public synchronized List<Map<String, Object>> autoAllocateSeats(Long sessionId, Long ticketLevelId, int quantity, Long userId, Long batchId) {
-        List<Long> ids = sessionSeats.stream()
-                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                .filter(item -> Objects.equals(item.get("ticketLevelId"), ticketLevelId))
-                .filter(item -> "AVAILABLE".equals(item.get("status")))
-                .limit(quantity)
-                .map(item -> (Long) item.get("id"))
-                .toList();
-        if (ids.size() < quantity) {
-            throw new ApiException(409, "可售座位不足，请调整票档或数量");
-        }
+        List<Long> ids = jdbcTemplate.queryForList("""
+                select id from session_seat
+                where session_id=? and ticket_level_id=? and status='AVAILABLE'
+                order by y, x, id limit ?
+                """, Long.class, sessionId, ticketLevelId, quantity);
+        if (ids.size() < quantity) throw new ApiException(409, "可售座位不足，请调整票档或数量");
         return lockSessionSeats(sessionId, ids, userId, batchId, 5);
     }
 
     public synchronized void releaseSessionSeats(List<Long> ids, Long userId) {
-        if (ids == null || ids.isEmpty()) {
-            return;
-        }
-        sessionSeats.stream()
-                .filter(item -> ids.contains((Long) item.get("id")))
-                .filter(item -> userId == null || Objects.equals(item.get("lockUserId"), userId))
-                .filter(item -> "LOCKED".equals(item.get("status")))
-                .forEach(item -> {
-                    item.put("status", "AVAILABLE");
-                    item.put("batchId", null);
-                    item.put("lockUserId", null);
-                    item.put("lockExpireTime", null);
-                    item.put("updatedAt", now());
-                });
+        if (ids == null || ids.isEmpty()) return;
+        List<Object> args = new ArrayList<>();
+        if (userId != null) args.add(userId);
+        args.addAll(ids);
+        jdbcTemplate.update("update session_seat set status='AVAILABLE', batch_id=null, lock_user_id=null, lock_expire_time=null, updated_at=now() where status='LOCKED' " +
+                (userId == null ? "" : "and lock_user_id=? ") + "and id in (" + placeholders(ids.size()) + ")", args.toArray());
     }
 
     public synchronized void markSessionSeatsSold(List<Long> ids, Long userId) {
-        if (ids == null || ids.isEmpty()) {
-            return;
-        }
-        sessionSeats.stream()
-                .filter(item -> ids.contains((Long) item.get("id")))
-                .filter(item -> userId == null || Objects.equals(item.get("lockUserId"), userId))
-                .forEach(item -> {
-                    item.put("status", "SOLD");
-                    item.put("lockExpireTime", null);
-                    item.put("updatedAt", now());
-                });
+        if (ids == null || ids.isEmpty()) return;
+        List<Object> args = new ArrayList<>();
+        if (userId != null) args.add(userId);
+        args.addAll(ids);
+        jdbcTemplate.update("update session_seat set status='SOLD', lock_expire_time=null, updated_at=now() where " +
+                (userId == null ? "" : "lock_user_id=? and ") + "id in (" + placeholders(ids.size()) + ")", args.toArray());
     }
 
     public synchronized void increaseTicketLevelSold(Long id, int quantity) {
-        Map<String, Object> level = find(ticketLevels, id, "票档不存在");
-        level.put("soldStock", (Integer) level.get("soldStock") + quantity);
-        level.put("lockedStock", Math.max(0, (Integer) level.get("lockedStock") - quantity));
-        level.put("updatedAt", now());
+        jdbcTemplate.update("""
+                update ticket_level
+                set sold_stock=sold_stock+?, locked_stock=greatest(0, locked_stock-?), updated_at=now()
+                where id=? and deleted=0
+                """, quantity, quantity, id);
     }
 
     public List<Map<String, Object>> saleBatches() {
-        return copyList(saleBatches);
+        refreshBatchStatus();
+        return rows(batchSelect() + " where sb.deleted = 0 order by sb.sale_start_time, sb.id");
     }
 
     public Map<String, Object> saleBatch(Long id) {
-        return copy(find(saleBatches, id, "售票批次不存在"));
+        refreshBatchStatus();
+        return one(batchSelect() + " where sb.id=? and sb.deleted=0", "售票批次不存在", id);
     }
 
     public Map<String, Object> createSaleBatch(Map<String, Object> payload) {
-        Map<String, Object> batch = map(
-                "id", batchId.incrementAndGet(),
-                "sessionId", longValue(payload, "sessionId", 1001L),
-                "batchName", str(payload, "batchName", "新批次"),
-                "saleStartTime", str(payload, "saleStartTime", "2026-07-20 10:00:00"),
-                "lockTime", str(payload, "lockTime", "2026-08-01 18:00:00"),
-                "releaseType", str(payload, "releaseType", "QUANTITY"),
-                "releaseQuantity", intValue(payload, "releaseQuantity", 100),
-                "releaseRatio", intValue(payload, "releaseRatio", 0),
-                "status", str(payload, "status", "NOT_STARTED"),
-                "allowReturnDuringSale", boolValue(payload, "allowReturnDuringSale", true),
-                "purchaseLimit", intValue(payload, "purchaseLimit", 2),
-                "enableQueue", boolValue(payload, "enableQueue", true),
-                "createdAt", now(),
-                "updatedAt", now()
+        jdbcTemplate.update("""
+                insert into sale_batch
+                (session_id, name, batch_name, sale_start_time, lock_time, open_mode, release_type, open_stock,
+                 release_quantity, release_ratio, allow_return_current_round, allow_return_during_sale,
+                 limit_per_user, purchase_limit, queue_enabled, enable_queue, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', now(), now(), 0)
+                """,
+                longValue(payload, "sessionId", 1001L),
+                str(payload, "batchName", "新批次"),
+                str(payload, "batchName", "新批次"),
+                timeValue(payload, "saleStartTime", "2026-07-20 10:00:00"),
+                timeValue(payload, "lockTime", "2026-08-01 18:00:00"),
+                str(payload, "releaseType", "QUANTITY"),
+                str(payload, "releaseType", "QUANTITY"),
+                intValue(payload, "releaseQuantity", 50),
+                intValue(payload, "releaseQuantity", 50),
+                intValue(payload, "releaseRatio", 0),
+                boolValue(payload, "allowReturnDuringSale", true),
+                boolValue(payload, "allowReturnDuringSale", true),
+                intValue(payload, "purchaseLimit", 2),
+                intValue(payload, "purchaseLimit", 2),
+                boolValue(payload, "enableQueue", true),
+                boolValue(payload, "enableQueue", true)
         );
-        saleBatches.add(batch);
-        return copy(batch);
+        return saleBatch(lastId());
     }
 
     public Map<String, Object> updateSaleBatch(Long id, Map<String, Object> payload) {
-        Map<String, Object> batch = find(saleBatches, id, "售票批次不存在");
-        merge(batch, payload, "batchName", "saleStartTime", "lockTime", "releaseType", "releaseQuantity", "releaseRatio", "status", "allowReturnDuringSale", "purchaseLimit", "enableQueue");
-        batch.put("updatedAt", now());
-        return copy(batch);
+        saleBatch(id);
+        jdbcTemplate.update("""
+                update sale_batch
+                set session_id=?, name=?, batch_name=?, sale_start_time=?, lock_time=?, open_mode=?, release_type=?,
+                    open_stock=?, release_quantity=?, release_ratio=?, allow_return_current_round=?,
+                    allow_return_during_sale=?, limit_per_user=?, purchase_limit=?, queue_enabled=?, enable_queue=?,
+                    status=?, updated_at=now()
+                where id=? and deleted=0
+                """,
+                longValue(payload, "sessionId", 1001L),
+                str(payload, "batchName", ""),
+                str(payload, "batchName", ""),
+                timeValue(payload, "saleStartTime", "2026-07-20 10:00:00"),
+                timeValue(payload, "lockTime", "2026-08-01 18:00:00"),
+                str(payload, "releaseType", "QUANTITY"),
+                str(payload, "releaseType", "QUANTITY"),
+                intValue(payload, "releaseQuantity", 0),
+                intValue(payload, "releaseQuantity", 0),
+                intValue(payload, "releaseRatio", 0),
+                boolValue(payload, "allowReturnDuringSale", true),
+                boolValue(payload, "allowReturnDuringSale", true),
+                intValue(payload, "purchaseLimit", 2),
+                intValue(payload, "purchaseLimit", 2),
+                boolValue(payload, "enableQueue", true),
+                boolValue(payload, "enableQueue", true),
+                str(payload, "status", "NOT_STARTED"),
+                id
+        );
+        return saleBatch(id);
     }
 
     public Map<String, Object> changeBatchStatus(Long id, String status) {
-        Map<String, Object> batch = find(saleBatches, id, "售票批次不存在");
-        batch.put("status", status);
-        batch.put("updatedAt", now());
-        return copy(batch);
+        jdbcTemplate.update("update sale_batch set status=?, updated_at=now() where id=? and deleted=0", status, id);
+        if ("SELLING".equals(status)) initRedisStock(id);
+        return saleBatch(id);
     }
 
     public Map<String, Object> activeBatch(Long sessionId) {
-        Map<String, Object> batch = saleBatches.stream()
-                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                .filter(item -> "SELLING".equals(item.get("status")) || "NOT_STARTED".equals(item.get("status")))
-                .sorted(Comparator.comparing(item -> parseTime(String.valueOf(item.get("saleStartTime")))))
-                .findFirst()
-                .map(this::copy)
-                .orElse(null);
-        if (batch != null) {
-            batch.putAll(frontSaleStatus(sessionId));
-        }
-        return batch;
+        Map<String, Object> status = frontSaleStatus(sessionId);
+        Object batchId = status.get("batchId");
+        return batchId == null ? null : saleBatch(Long.valueOf(String.valueOf(batchId)));
     }
 
     public Map<String, Object> frontSaleStatus(Long sessionId) {
+        refreshBatchStatus();
         Map<String, Object> batch = frontBatch(sessionId);
-        if (batch == null) {
-            return map("status", "UNAVAILABLE", "buttonText", "暂不可售", "clickable", false, "hasStock", false);
-        }
+        if (batch == null) return map("status", "ENDED", "buttonText", "暂无可售", "clickable", false, "hasStock", false);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime saleStart = parseTime(String.valueOf(batch.get("saleStartTime")));
         LocalDateTime lockTime = parseTime(String.valueOf(batch.get("lockTime")));
         boolean hasStock = hasFrontStock(batch);
-        if (now.isBefore(saleStart)) {
-            return frontStatus(batch, "RESERVABLE", "预约抢票", true, hasStock);
-        }
+        if (now.isBefore(saleStart)) return frontStatus(batch, "RESERVABLE", "预约抢票", true, hasStock);
         if (!now.isBefore(lockTime) || "LOCKED".equals(batch.get("status"))) {
             boolean hasNext = hasFutureBatch(sessionId, now);
             return frontStatus(batch, hasNext ? "RESERVABLE" : "ENDED", hasNext ? "预约抢票" : "已结束", hasNext, false);
         }
-        if (!hasStock) {
-            return frontStatus(batch, "SOLD_OUT", "缺货中", false, false);
-        }
+        if (!hasStock) return frontStatus(batch, "SOLD_OUT", "缺货中", false, false);
         return frontStatus(batch, "ON_SALE", "立即购票", true, true);
     }
 
@@ -517,13 +574,15 @@ public class Phase3ResourceService {
     }
 
     public Map<String, Object> initRedisStock(Long batchId) {
-        Map<String, Object> batch = find(saleBatches, batchId, "售票批次不存在");
+        Map<String, Object> batch = saleBatch(batchId);
         Long sessionId = (Long) batch.get("sessionId");
-        List<Map<String, Object>> levels = ticketLevels(sessionId);
         Map<String, Object> result = new LinkedHashMap<>();
-        for (Map<String, Object> level : levels) {
+        for (Map<String, Object> level : ticketLevels(sessionId)) {
             String key = redisStockKey(batchId, (Long) level.get("id"));
-            int stock = Math.min((Integer) level.get("releasedStock"), (Integer) batch.get("releaseQuantity"));
+            int releaseQuantity = intValue(batch, "releaseQuantity", 0);
+            int released = intValue(level, "releasedStock", 0);
+            int sold = intValue(level, "soldStock", 0);
+            int stock = Math.max(0, Math.min(released, releaseQuantity == 0 ? released : releaseQuantity) - sold);
             redisTemplate.opsForValue().set(key, String.valueOf(stock));
             result.put(key, stock);
         }
@@ -531,10 +590,9 @@ public class Phase3ResourceService {
     }
 
     public Map<String, Object> batchStockSummary(Long batchId) {
-        Map<String, Object> batch = find(saleBatches, batchId, "售票批次不存在");
+        Map<String, Object> batch = saleBatch(batchId);
         Long sessionId = (Long) batch.get("sessionId");
-        List<Map<String, Object>> levels = ticketLevels(sessionId);
-        List<Map<String, Object>> rows = levels.stream().map(level -> {
+        List<Map<String, Object>> rows = ticketLevels(sessionId).stream().map(level -> {
             String key = redisStockKey(batchId, (Long) level.get("id"));
             return map(
                     "ticketLevelId", level.get("id"),
@@ -546,76 +604,70 @@ public class Phase3ResourceService {
                     "lockedStock", level.get("lockedStock")
             );
         }).toList();
-        return map("batch", copy(batch), "levels", rows);
+        return map("batch", batch, "levels", rows);
     }
 
     public List<Map<String, Object>> stockPool() {
-        return copyList(stockPool);
+        return rows("""
+                select id, session_id sessionId, ticket_level_id ticketLevelId, session_seat_id seatId,
+                       source_type sourceType, status stockStatus, available_for_next_batch availableForNextBatch,
+                       created_at createdAt, updated_at updatedAt
+                from stock_pool order by id desc
+                """);
     }
 
     public List<Map<String, Object>> stockPoolBySession(Long sessionId) {
-        return stockPool.stream().filter(item -> Objects.equals(item.get("sessionId"), sessionId)).map(this::copy).toList();
+        return rows("""
+                select id, session_id sessionId, ticket_level_id ticketLevelId, session_seat_id seatId,
+                       source_type sourceType, status stockStatus, available_for_next_batch availableForNextBatch,
+                       created_at createdAt, updated_at updatedAt
+                from stock_pool where session_id=? order by id desc
+                """, sessionId);
     }
 
     public Map<String, Object> addStockPool(Map<String, Object> payload) {
-        Map<String, Object> row = map(
-                "id", poolId.incrementAndGet(),
-                "sessionId", longValue(payload, "sessionId", 1001L),
-                "ticketLevelId", longValue(payload, "ticketLevelId", 2001L),
-                "seatId", longValue(payload, "seatId", null),
-                "sourceType", str(payload, "sourceType", "ADMIN_ADD"),
-                "stockStatus", "WAITING_RELEASE",
-                "availableForNextBatch", boolValue(payload, "availableForNextBatch", true),
-                "createdAt", now(),
-                "updatedAt", now()
+        jdbcTemplate.update("""
+                insert into stock_pool
+                (session_id, ticket_level_id, session_seat_id, source_type, status, available_for_next_batch, created_at, updated_at)
+                values (?, ?, ?, ?, 'WAITING_RELEASE', ?, now(), now())
+                """,
+                longValue(payload, "sessionId", 1001L),
+                longValue(payload, "ticketLevelId", null),
+                longValue(payload, "seatId", null),
+                str(payload, "sourceType", "ADMIN_ADD"),
+                boolValue(payload, "availableForNextBatch", true)
         );
-        stockPool.add(row);
-        return copy(row);
+        return stockPool().stream().filter(row -> Objects.equals(row.get("id"), lastId())).findFirst().orElse(Map.of());
     }
 
     public Map<String, Object> releaseStockToBatch(Map<String, Object> payload) {
         Long targetBatchId = longValue(payload, "batchId", null);
-        if (targetBatchId == null) {
-            throw new ApiException(400, "请选择要释放到的售票批次");
-        }
-        stockPool.stream()
-                .filter(item -> "WAITING_RELEASE".equals(item.get("stockStatus")))
-                .filter(item -> Boolean.TRUE.equals(item.get("availableForNextBatch")))
-                .forEach(item -> {
-                    item.put("stockStatus", "RELEASED");
-                    item.put("updatedAt", now());
-                });
+        if (targetBatchId == null) throw new ApiException(400, "请选择要释放到的售票批次");
+        jdbcTemplate.update("""
+                update stock_pool set status='RELEASED', updated_at=now()
+                where status='WAITING_RELEASE' and available_for_next_batch=1
+                """);
         return batchStockSummary(targetBatchId);
     }
 
-    @Scheduled(fixedDelay = 30000)
     public void refreshBatchStatus() {
         LocalDateTime now = LocalDateTime.now();
-        for (Map<String, Object> batch : saleBatches) {
-            LocalDateTime saleStart = parseTime(String.valueOf(batch.get("saleStartTime")));
-            LocalDateTime lockTime = parseTime(String.valueOf(batch.get("lockTime")));
-            if ("NOT_STARTED".equals(batch.get("status")) && !now.isBefore(saleStart)) {
-                batch.put("status", "SELLING");
-                initRedisStock((Long) batch.get("id"));
-            }
-            if ("SELLING".equals(batch.get("status")) && !now.isBefore(lockTime)) {
-                batch.put("status", "LOCKED");
-            }
-        }
+        jdbcTemplate.update("update sale_batch set status='SELLING', updated_at=now() where deleted=0 and status='NOT_STARTED' and sale_start_time <= ?", Timestamp.valueOf(now));
+        jdbcTemplate.update("update sale_batch set status='LOCKED', updated_at=now() where deleted=0 and status='SELLING' and lock_time <= ?", Timestamp.valueOf(now));
     }
 
     private void seedVenues() {
-        venues.add(map("id", 1L, "name", "星河影城一号厅", "cityId", 1L, "cityName", "上海", "address", "浦东新区星河路 18 号", "capacity", 96, "description", "适合电影选座演示的小厅", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        venues.add(map("id", 2L, "name", "城市剧院中厅", "cityId", 2L, "cityName", "杭州", "address", "西湖区文艺路 16 号", "capacity", 384, "description", "适合话剧和音乐会的中型剧院", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        venues.add(map("id", 3L, "name", "海川体育馆", "cityId", 3L, "cityName", "深圳", "address", "南山区滨海大道 188 号", "capacity", 1200, "description", "适合演唱会和体育赛事的大场馆", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
+        insertVenue(1L, "星河影城一号厅", 1L, "上海", "浦东新区星河路 18 号", 96, "适合电影选座演示的小厅");
+        insertVenue(2L, "城市剧院中厅", 2L, "杭州", "西湖区文艺路 16 号", 384, "适合话剧和音乐会的中型剧院");
+        insertVenue(3L, "海川体育馆", 3L, "深圳", "南山区滨海大道 188 号", 1200, "适合演唱会和体育赛事的大场馆");
     }
 
     private void seedAreas() {
-        areas.add(map("id", 1L, "venueId", 1L, "areaName", "影厅A区", "areaType", "SEATED", "defaultTicketLevel", "电影票", "sortOrder", 1, "color", "#d9303e", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        areas.add(map("id", 2L, "venueId", 2L, "areaName", "一层池座", "areaType", "SEATED", "defaultTicketLevel", "优选票", "sortOrder", 1, "color", "#177e89", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        areas.add(map("id", 3L, "venueId", 2L, "areaName", "二层楼座", "areaType", "SEATED", "defaultTicketLevel", "看台票", "sortOrder", 2, "color", "#b7791f", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        areas.add(map("id", 4L, "venueId", 3L, "areaName", "A区", "areaType", "SEATED", "defaultTicketLevel", "内场票", "sortOrder", 1, "color", "#d9303e", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        areas.add(map("id", 5L, "venueId", 3L, "areaName", "B区", "areaType", "SEATED", "defaultTicketLevel", "看台票", "sortOrder", 2, "color", "#177e89", "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
+        insertArea(1L, 1L, "影厅A区", "电影票", 1, "#d9303e");
+        insertArea(2L, 2L, "一层池座", "优选票", 1, "#177e89");
+        insertArea(3L, 2L, "二层楼座", "看台票", 2, "#b7791f");
+        insertArea(4L, 3L, "A区", "内场票", 1, "#d9303e");
+        insertArea(5L, 3L, "B区", "看台票", 2, "#177e89");
     }
 
     private void seedSeats() {
@@ -627,146 +679,241 @@ public class Phase3ResourceService {
     }
 
     private void seedSessions() {
-        sessions.add(map("id", 1001L, "performanceId", 102L, "venueId", 2L, "sessionName", "夜航西窗 8月21日晚场", "saleStartTime", "2026-07-20 10:00:00", "lockTime", "2026-08-21 18:00:00", "entryTime", "2026-08-21 18:15:00", "startTime", "2026-08-21 19:00:00", "endTime", "2026-08-21 21:20:00", "purchaseMode", "SELECTABLE", "status", "SCHEDULED", "createdAt", now(), "updatedAt", now()));
-        sessions.add(map("id", 1002L, "performanceId", 101L, "venueId", 3L, "sessionName", "星河回声 上海站", "saleStartTime", "2026-07-20 10:00:00", "lockTime", "2026-08-18 18:30:00", "entryTime", "2026-08-18 18:00:00", "startTime", "2026-08-18 19:30:00", "endTime", "2026-08-18 22:00:00", "purchaseMode", "AUTO_ALLOCATE", "status", "SCHEDULED", "createdAt", now(), "updatedAt", now()));
-        sessions.add(map("id", 1003L, "performanceId", 201L, "venueId", 1L, "sessionName", "深空旅人 10:30", "saleStartTime", "2026-07-10 10:00:00", "lockTime", "2026-12-31 23:00:00", "entryTime", "2026-07-18 10:00:00", "startTime", "2026-07-18 10:30:00", "endTime", "2026-07-18 12:40:00", "purchaseMode", "SELECTABLE", "status", "SCHEDULED", "createdAt", now(), "updatedAt", now()));
+        insertSession(1001L, 102L, 2L, "夜航西窗 8月21日晚场", "2026-07-20 10:00:00", "2026-08-21 18:00:00", "2026-08-21 18:15:00", "2026-08-21 19:00:00", "2026-08-21 21:20:00", "SELECTABLE");
+        insertSession(1002L, 101L, 3L, "星河回声 上海站", "2026-07-20 10:00:00", "2026-08-18 18:30:00", "2026-08-18 18:00:00", "2026-08-18 19:30:00", "2026-08-18 22:00:00", "AUTO_ALLOCATE");
+        insertSession(1003L, 201L, 1L, "深空旅人 10:30", "2026-07-10 10:00:00", "2026-12-31 23:00:00", "2026-07-18 10:00:00", "2026-07-18 10:30:00", "2026-07-18 12:40:00", "SELECTABLE");
     }
 
     private void seedTicketLevels() {
-        ticketLevels.add(map("id", 2001L, "sessionId", 1001L, "name", "池座优选票", "price", new BigDecimal("380"), "areaId", 2L, "totalStock", 240, "releasedStock", 120, "unreleasedStock", 120, "soldStock", 0, "lockedStock", 0, "refundedStock", 0, "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        ticketLevels.add(map("id", 2002L, "sessionId", 1001L, "name", "楼座惠民票", "price", new BigDecimal("180"), "areaId", 3L, "totalStock", 144, "releasedStock", 60, "unreleasedStock", 84, "soldStock", 0, "lockedStock", 0, "refundedStock", 0, "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        ticketLevels.add(map("id", 2003L, "sessionId", 1002L, "name", "内场票", "price", new BigDecimal("680"), "areaId", 4L, "totalStock", 160, "releasedStock", 80, "unreleasedStock", 80, "soldStock", 0, "lockedStock", 0, "refundedStock", 0, "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
-        ticketLevels.add(map("id", 2004L, "sessionId", 1002L, "name", "看台票", "price", new BigDecimal("380"), "areaId", 5L, "totalStock", 160, "releasedStock", 80, "unreleasedStock", 80, "soldStock", 0, "lockedStock", 0, "refundedStock", 0, "status", "ENABLED", "createdAt", now(), "updatedAt", now()));
+        insertTicketLevel(2001L, 1001L, "池座优选票", "380", 2L, 240, 120, 120);
+        insertTicketLevel(2002L, 1001L, "楼座惠民票", "180", 3L, 144, 60, 84);
+        insertTicketLevel(2003L, 1002L, "内场票", "680", 4L, 160, 80, 80);
+        insertTicketLevel(2004L, 1002L, "看台票", "380", 5L, 160, 80, 80);
     }
 
     private void seedBatches() {
-        saleBatches.add(map("id", 3001L, "sessionId", 1001L, "batchName", "第一轮开售", "saleStartTime", "2026-07-20 10:00:00", "lockTime", "2026-08-01 18:00:00", "releaseType", "QUANTITY", "releaseQuantity", 120, "releaseRatio", 0, "status", "SELLING", "allowReturnDuringSale", true, "purchaseLimit", 2, "enableQueue", true, "createdAt", now(), "updatedAt", now()));
-        saleBatches.add(map("id", 3002L, "sessionId", 1002L, "batchName", "锁票后库存入池", "saleStartTime", "2026-07-22 10:00:00", "lockTime", "2026-07-30 18:00:00", "releaseType", "QUANTITY", "releaseQuantity", 80, "releaseRatio", 0, "status", "LOCKED", "allowReturnDuringSale", false, "purchaseLimit", 2, "enableQueue", true, "createdAt", now(), "updatedAt", now()));
-        saleBatches.add(map("id", 3003L, "sessionId", 1001L, "batchName", "第二轮重新开放", "saleStartTime", "2026-08-05 10:00:00", "lockTime", "2026-08-20 18:00:00", "releaseType", "RATIO", "releaseQuantity", 0, "releaseRatio", 30, "status", "NOT_STARTED", "allowReturnDuringSale", true, "purchaseLimit", 2, "enableQueue", true, "createdAt", now(), "updatedAt", now()));
-        stockPool.add(map("id", 4001L, "sessionId", 1002L, "ticketLevelId", 2003L, "seatId", null, "sourceType", "POST_LOCK_RETURN", "stockStatus", "WAITING_RELEASE", "availableForNextBatch", true, "createdAt", now(), "updatedAt", now()));
-        stockPool.add(map("id", 4002L, "sessionId", 1001L, "ticketLevelId", 2002L, "seatId", null, "sourceType", "UNRELEASED", "stockStatus", "WAITING_RELEASE", "availableForNextBatch", true, "createdAt", now(), "updatedAt", now()));
+        insertBatch(3001L, 1001L, "第一轮开售", "2026-07-20 10:00:00", "2026-08-01 18:00:00", "QUANTITY", 120, 0, "SELLING");
+        insertBatch(3002L, 1002L, "锁票后库存入池", "2026-07-22 10:00:00", "2026-07-30 18:00:00", "QUANTITY", 80, 0, "LOCKED");
+        insertBatch(3003L, 1001L, "第二轮重新开放", "2026-08-05 10:00:00", "2026-08-20 18:00:00", "RATIO", 0, 30, "NOT_STARTED");
     }
 
-    private String redisStockKey(Long batchId, Long ticketLevelId) {
-        return "ticket:batch:" + batchId + ":level:" + ticketLevelId + ":stock";
+    private void insertVenue(Long id, String name, Long cityId, String cityName, String address, int capacity, String description) {
+        jdbcTemplate.update("""
+                insert into venue (id, city_id, city_name, name, address, intro, description, capacity, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
+                """, id, cityId, cityName, name, address, description, description, capacity);
+    }
+
+    private void insertArea(Long id, Long venueId, String name, String level, int sort, String color) {
+        jdbcTemplate.update("""
+                insert into venue_area (id, venue_id, name, area_type, default_ticket_level, sort_order, color, status, created_at, updated_at, deleted)
+                values (?, ?, ?, 'SEATED', ?, ?, ?, 'ENABLED', now(), now(), 0)
+                """, id, venueId, name, level, sort, color);
+    }
+
+    private void insertSession(Long id, Long performanceId, Long venueId, String name, String saleStart, String lock, String entry, String start, String end, String mode) {
+        jdbcTemplate.update("""
+                insert into performance_session
+                (id, performance_id, venue_id, session_name, hall_name, sale_start_time, lock_time, entry_time, start_time, end_time, sale_mode, purchase_mode, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', now(), now(), 0)
+                """, id, performanceId, venueId, name, name, Timestamp.valueOf(parseTime(saleStart)), Timestamp.valueOf(parseTime(lock)), Timestamp.valueOf(parseTime(entry)), Timestamp.valueOf(parseTime(start)), Timestamp.valueOf(parseTime(end)), mode, mode);
+    }
+
+    private void insertTicketLevel(Long id, Long sessionId, String name, String price, Long areaId, int total, int released, int unreleased) {
+        jdbcTemplate.update("""
+                insert into ticket_level
+                (id, session_id, name, area_id, price, total_stock, released_stock, unreleased_stock, sold_stock, locked_stock, refunded_stock, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'ENABLED', now(), now(), 0)
+                """, id, sessionId, name, areaId, new BigDecimal(price), total, released, unreleased);
+    }
+
+    private void insertBatch(Long id, Long sessionId, String name, String saleStart, String lock, String releaseType, int quantity, int ratio, String status) {
+        jdbcTemplate.update("""
+                insert into sale_batch
+                (id, session_id, name, batch_name, sale_start_time, lock_time, open_mode, release_type, open_stock, release_quantity,
+                 release_ratio, allow_return_current_round, allow_return_during_sale, limit_per_user, purchase_limit,
+                 queue_enabled, enable_queue, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 2, 2, 1, 1, ?, now(), now(), 0)
+                """, id, sessionId, name, name, Timestamp.valueOf(parseTime(saleStart)), Timestamp.valueOf(parseTime(lock)), releaseType, releaseType, quantity, quantity, ratio, status);
+    }
+
+    private Map<String, Object> findVenue(Long id) {
+        return venue(id);
+    }
+
+    private Map<String, Object> area(Long id) {
+        return one("""
+                select id, venue_id venueId, name areaName, area_type areaType, default_ticket_level defaultTicketLevel,
+                       sort_order sortOrder, color, status, created_at createdAt, updated_at updatedAt
+                from venue_area where id = ? and deleted = 0
+                """, "区域不存在", id);
+    }
+
+    private Map<String, Object> seat(Long id) {
+        return one("""
+                select id, venue_id venueId, area_id areaId, row_no rowNo, seat_no seatNo, seat_label seatLabel,
+                       x, y, is_aisle isAisle, is_disabled isDisabled, status, created_at createdAt, updated_at updatedAt
+                from seat where id = ? and deleted = 0
+                """, "座位不存在", id);
+    }
+
+    private String sessionSelect() {
+        return """
+                select ps.id, ps.performance_id performanceId, ps.venue_id venueId,
+                       coalesce(ps.session_name, ps.hall_name) sessionName,
+                       date_format(ps.sale_start_time, '%Y-%m-%d %H:%i:%s') saleStartTime,
+                       date_format(ps.lock_time, '%Y-%m-%d %H:%i:%s') lockTime,
+                       date_format(ps.entry_time, '%Y-%m-%d %H:%i:%s') entryTime,
+                       date_format(ps.start_time, '%Y-%m-%d %H:%i:%s') startTime,
+                       date_format(ps.end_time, '%Y-%m-%d %H:%i:%s') endTime,
+                       coalesce(ps.purchase_mode, ps.sale_mode) purchaseMode,
+                       ps.status, ps.created_at createdAt, ps.updated_at updatedAt
+                from performance_session ps
+                """;
+    }
+
+    private String ticketLevelSelect() {
+        return """
+                select tl.id, tl.session_id sessionId, tl.name, tl.price, tl.area_id areaId, tl.total_stock totalStock,
+                       tl.released_stock releasedStock, tl.unreleased_stock unreleasedStock, tl.sold_stock soldStock,
+                       tl.locked_stock lockedStock, tl.refunded_stock refundedStock, tl.status, tl.created_at createdAt, tl.updated_at updatedAt
+                from ticket_level tl
+                """;
+    }
+
+    private String batchSelect() {
+        return """
+                select sb.id, sb.session_id sessionId, coalesce(sb.batch_name, sb.name) batchName,
+                       date_format(sb.sale_start_time, '%Y-%m-%d %H:%i:%s') saleStartTime,
+                       date_format(sb.lock_time, '%Y-%m-%d %H:%i:%s') lockTime,
+                       coalesce(sb.release_type, sb.open_mode) releaseType,
+                       coalesce(sb.release_quantity, sb.open_stock) releaseQuantity,
+                       sb.release_ratio releaseRatio, sb.allow_return_during_sale allowReturnDuringSale,
+                       coalesce(sb.purchase_limit, sb.limit_per_user) purchaseLimit,
+                       coalesce(sb.enable_queue, sb.queue_enabled) enableQueue,
+                       sb.status, sb.created_at createdAt, sb.updated_at updatedAt
+                from sale_batch sb
+                """;
+    }
+
+    private String sessionSeatSelect() {
+        return """
+                select id, session_id sessionId, seat_id seatId, venue_id venueId, area_id areaId, ticket_level_id ticketLevelId,
+                       batch_id batchId, status, lock_user_id lockUserId,
+                       date_format(lock_expire_time, '%Y-%m-%d %H:%i:%s') lockExpireTime,
+                       seat_label seatLabel, x, y, created_at createdAt, updated_at updatedAt
+                from session_seat
+                """;
     }
 
     private Map<String, Object> frontBatch(Long sessionId) {
+        List<Map<String, Object>> candidates = rows(batchSelect() + """
+                where sb.session_id = ? and sb.deleted = 0 and sb.status <> 'CANCELLED'
+                order by sb.sale_start_time asc, sb.id asc
+                """, sessionId);
         LocalDateTime now = LocalDateTime.now();
-        return saleBatches.stream()
-                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                .filter(item -> !"CANCELLED".equals(item.get("status")))
-                .filter(item -> now.isBefore(parseTime(String.valueOf(item.get("lockTime"))) )
+        return candidates.stream()
+                .filter(item -> now.isBefore(parseTime(String.valueOf(item.get("lockTime"))))
                         || "SELLING".equals(item.get("status"))
                         || "NOT_STARTED".equals(item.get("status")))
-                .sorted(Comparator.comparing(item -> parseTime(String.valueOf(item.get("saleStartTime")))))
                 .findFirst()
-                .orElseGet(() -> saleBatches.stream()
-                        .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                        .max(Comparator.comparing(item -> parseTime(String.valueOf(item.get("lockTime")))))
-                        .orElse(null));
+                .orElse(candidates.stream().max(Comparator.comparing(item -> parseTime(String.valueOf(item.get("lockTime"))))).orElse(null));
     }
 
     private Map<String, Object> frontStatus(Map<String, Object> batch, String status, String buttonText, boolean clickable, boolean hasStock) {
-        return map(
-                "batchId", batch.get("id"),
-                "status", status,
-                "frontStatus", status,
-                "buttonText", buttonText,
-                "clickable", clickable,
-                "hasStock", hasStock,
-                "saleStartTime", batch.get("saleStartTime"),
-                "saleEndTime", batch.get("lockTime")
-        );
+        return map("batchId", batch.get("id"), "status", status, "frontStatus", status, "buttonText", buttonText,
+                "clickable", clickable, "hasStock", hasStock, "saleStartTime", batch.get("saleStartTime"), "saleEndTime", batch.get("lockTime"));
     }
 
     private boolean hasFutureBatch(Long sessionId, LocalDateTime now) {
-        return saleBatches.stream()
-                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+        return rows(batchSelect() + " where sb.session_id=? and sb.deleted=0", sessionId).stream()
                 .anyMatch(item -> now.isBefore(parseTime(String.valueOf(item.get("saleStartTime")))));
     }
 
     private boolean hasFrontStock(Map<String, Object> batch) {
         Long batchId = (Long) batch.get("id");
         Long sessionId = (Long) batch.get("sessionId");
-        return ticketLevels.stream()
-                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                .anyMatch(level -> stockFor(batchId, level) > 0);
+        return ticketLevels(sessionId).stream().anyMatch(level -> stockFor(batchId, level) > 0);
     }
 
     private int stockFor(Long batchId, Map<String, Object> level) {
         String redisStock = redisTemplate.opsForValue().get(redisStockKey(batchId, (Long) level.get("id")));
-        if (redisStock != null && !redisStock.isBlank()) {
-            return Math.max(0, Integer.parseInt(redisStock));
-        }
-        int releaseQuantity = intValue(saleBatch(batchId), "releaseQuantity", 0);
-        int released = (Integer) level.get("releasedStock");
-        int sold = (Integer) level.get("soldStock");
+        if (redisStock != null && !redisStock.isBlank()) return Math.max(0, Integer.parseInt(redisStock));
+        Map<String, Object> batch = saleBatch(batchId);
+        int releaseQuantity = intValue(batch, "releaseQuantity", 0);
+        int released = intValue(level, "releasedStock", 0);
+        int sold = intValue(level, "soldStock", 0);
         return Math.max(0, Math.min(released, releaseQuantity == 0 ? released : releaseQuantity) - sold);
     }
 
     private String ticketLevelFrontStatus(Map<String, Object> level, String saleStatus) {
-        if ("RESERVABLE".equals(saleStatus)) {
-            return "暂未开售";
-        }
-        if (!"ON_SALE".equals(saleStatus)) {
-            return "不可售";
-        }
+        if ("RESERVABLE".equals(saleStatus)) return "暂未开售";
+        if (!"ON_SALE".equals(saleStatus)) return "不可售";
         int stock = stockFor((Long) frontSaleStatus((Long) level.get("sessionId")).get("batchId"), level);
-        if (stock <= 0) {
-            return "缺货";
-        }
+        if (stock <= 0) return "缺货";
         return stock <= 10 ? "票量紧张" : "可选";
     }
 
-    private Map<String, Object> find(List<Map<String, Object>> source, Long id, String message) {
-        return source.stream().filter(item -> Objects.equals(item.get("id"), id)).findFirst().orElseThrow(() -> new ApiException(404, message));
+    private String redisStockKey(Long batchId, Long ticketLevelId) {
+        return "ticket:batch:" + batchId + ":level:" + ticketLevelId + ":stock";
     }
 
-    private List<Map<String, Object>> copyList(List<Map<String, Object>> source) {
-        return source.stream().map(this::copy).toList();
+    private List<Map<String, Object>> rows(String sql, Object... args) {
+        return jdbcTemplate.query(sql, this::row, args);
     }
 
-    private Map<String, Object> copy(Map<String, Object> source) {
-        return new LinkedHashMap<>(source);
+    private Map<String, Object> one(String sql, String message, Object... args) {
+        List<Map<String, Object>> rows = rows(sql, args);
+        if (rows.isEmpty()) throw new ApiException(404, message);
+        return rows.get(0);
     }
 
-    private Map<String, Object> map(Object... values) {
+    private Map<String, Object> row(ResultSet rs, int rowNum) throws SQLException {
+        ResultSetMetaData meta = rs.getMetaData();
         Map<String, Object> map = new LinkedHashMap<>();
-        for (int i = 0; i < values.length; i += 2) {
-            map.put(String.valueOf(values[i]), values[i + 1]);
+        for (int i = 1; i <= meta.getColumnCount(); i++) {
+            Object value = rs.getObject(i);
+            if (value instanceof Timestamp timestamp) value = FORMATTER.format(timestamp.toLocalDateTime());
+            map.put(meta.getColumnLabel(i), value);
         }
         return map;
     }
 
-    private void merge(Map<String, Object> target, Map<String, Object> payload, String... keys) {
-        for (String key : keys) {
-            if (payload.containsKey(key)) {
-                target.put(key, payload.get(key));
-            }
-        }
+    private Object[] args(Object first, List<Long> rest) {
+        List<Object> args = new ArrayList<>();
+        args.add(first);
+        args.addAll(rest);
+        return args.toArray();
     }
 
-    private List<Integer> parseAisles(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        List<Integer> result = new ArrayList<>();
-        for (String part : value.split(",")) {
-            if (!part.isBlank()) {
-                result.add(Integer.parseInt(part.trim()));
-            }
-        }
-        result.sort(Comparator.naturalOrder());
-        return result;
+    private Object[] prepend(Object first, List<Long> rest) {
+        return args(first, rest);
     }
 
-    private String now() {
-        return FORMATTER.format(LocalDateTime.now());
+    private String placeholders(int size) {
+        return String.join(",", java.util.Collections.nCopies(size, "?"));
+    }
+
+    private Long lastId() {
+        return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
+    }
+
+    private Timestamp timeValue(Map<String, Object> payload, String key, String fallback) {
+        return Timestamp.valueOf(parseTime(str(payload, key, fallback)));
     }
 
     private LocalDateTime parseTime(String value) {
         return LocalDateTime.parse(value, FORMATTER);
+    }
+
+    private List<Integer> parseAisles(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<Integer> result = new ArrayList<>();
+        for (String part : value.split(",")) {
+            if (!part.isBlank()) result.add(Integer.parseInt(part.trim()));
+        }
+        result.sort(Comparator.naturalOrder());
+        return result;
     }
 
     private String str(Map<String, Object> payload, String key, String fallback) {
@@ -776,17 +923,13 @@ public class Phase3ResourceService {
 
     private Long longValue(Map<String, Object> payload, String key, Long fallback) {
         Object value = payload.get(key);
-        if (value == null || String.valueOf(value).isBlank()) {
-            return fallback;
-        }
+        if (value == null || String.valueOf(value).isBlank()) return fallback;
         return Long.valueOf(String.valueOf(value));
     }
 
     private int intValue(Map<String, Object> payload, String key, int fallback) {
         Object value = payload.get(key);
-        if (value == null || String.valueOf(value).isBlank()) {
-            return fallback;
-        }
+        if (value == null || String.valueOf(value).isBlank()) return fallback;
         return new BigDecimal(String.valueOf(value)).intValue();
     }
 
@@ -797,6 +940,13 @@ public class Phase3ResourceService {
 
     private boolean boolValue(Map<String, Object> payload, String key, boolean fallback) {
         Object value = payload.get(key);
-        return value == null ? fallback : Boolean.parseBoolean(String.valueOf(value));
+        if (value == null) return fallback;
+        return Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private Map<String, Object> map(Object... values) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < values.length; i += 2) map.put(String.valueOf(values[i]), values[i + 1]);
+        return map;
     }
 }

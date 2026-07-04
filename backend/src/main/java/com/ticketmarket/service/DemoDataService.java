@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 public class DemoDataService {
     private final AtomicLong userId = new AtomicLong(20);
     private final AtomicLong viewerId = new AtomicLong(100);
+    private final AtomicLong performanceId = new AtomicLong(112);
     private final Map<Long, UserAccount> usersById = new ConcurrentHashMap<>();
     private final Map<String, UserAccount> usersByName = new ConcurrentHashMap<>();
     private final Map<Long, List<Viewer>> viewersByUser = new ConcurrentHashMap<>();
@@ -107,6 +108,12 @@ public class DemoDataService {
     }
 
     public List<PerformanceCard> performances() {
+        return performances.stream()
+                .filter(item -> !"DRAFT".equals(item.getPublishStatus()))
+                .toList();
+    }
+
+    public List<PerformanceCard> adminPerformances() {
         return List.copyOf(performances);
     }
 
@@ -115,6 +122,24 @@ public class DemoDataService {
                 .filter(item -> Objects.equals(item.getId(), id))
                 .findFirst()
                 .orElseThrow(() -> new ApiException(404, "演出不存在"));
+    }
+
+    public synchronized PerformanceCard createPerformance(Map<String, Object> payload) {
+        PerformanceCard card = new PerformanceCard();
+        card.setId(performanceId.incrementAndGet());
+        applyPerformancePayload(card, payload);
+        performances.add(0, card);
+        return card;
+    }
+
+    public synchronized PerformanceCard updatePerformance(Long id, Map<String, Object> payload) {
+        PerformanceCard card = performance(id);
+        applyPerformancePayload(card, payload);
+        return card;
+    }
+
+    public synchronized void deletePerformance(Long id) {
+        performance(id).setPublishStatus("DRAFT");
     }
 
     public MovieCard movie(Long id) {
@@ -133,7 +158,7 @@ public class DemoDataService {
         String cityValue = normalizeNullable(city);
         String categoryValue = normalizeNullable(category);
         String statusValue = normalizeNullable(status);
-        return performances.stream()
+        return performances().stream()
                 .filter(item -> kw.isBlank()
                         || normalize(item.getTitle()).contains(kw)
                         || normalize(item.getVenue()).contains(kw)
@@ -246,6 +271,7 @@ public class DemoDataService {
         card.setSubtitle(subtitle);
         card.setCategoryCode(categoryCode);
         card.setCategoryName(categoryName);
+        card.setVenueId(null);
         card.setCity(city);
         card.setVenue(venue);
         card.setAddress(address);
@@ -257,6 +283,7 @@ public class DemoDataService {
         card.setDetailImage("/uploads/detail/detail-" + String.format("%02d", ((id.intValue() - 101) % 8) + 1) + ".svg");
         card.setSaleStatus(status);
         card.setSaleMode(saleMode);
+        card.setPublishStatus("PUBLISHED");
         card.setTags(tags);
         card.setSummary(subtitle);
         card.setIntro(title + "围绕“" + subtitle + "”展开，节目以清晰的段落、稳定的现场调度和富有层次的灯光声场组织观演体验。项目内容、人员与场馆均为 TicketMarket 本地虚构数据，用于展示正式票务平台中项目介绍、场次选择、票档展示和入场须知的完整链路。");
@@ -265,6 +292,15 @@ public class DemoDataService {
         card.setPurchaseNotice("购票前请确认场次、票档、数量和观演人信息。电子票将在订单支付完成后生成，同一账号同一场次按项目规则限购；儿童、陪同人员及特殊入场要求请以本页说明和现场公告为准。");
         card.setRefundRule("本项目支持条件退票：距开场 72 小时以上可申请退票，距开场 24 至 72 小时内按订单金额收取服务费，距开场不足 24 小时或票券已核验后不支持退票。");
         card.setEntryRule("请携带购票账号对应的有效身份证件或电子票二维码入场。入场时需通过票券核验，已退票、已核验、非本场次或截图异常票券不可入场；迟到观众请听从现场工作人员安排。");
+        card.setDetailBlocks(List.of(
+                Map.of("type", "IMAGE", "content", card.getDetailImage()),
+                Map.of("type", "HEADING", "content", "项目介绍"),
+                Map.of("type", "PARAGRAPH", "content", card.getIntro()),
+                Map.of("type", "HEADING", "content", "演职人员"),
+                Map.of("type", "PARAGRAPH", "content", card.getArtistInfo()),
+                Map.of("type", "HEADING", "content", "场馆介绍"),
+                Map.of("type", "PARAGRAPH", "content", card.getVenueIntro())
+        ));
         card.setSessions(List.of(
                 new SessionOption(id * 10 + 1, startTime, "2026-07-20 10:00", "2026-08-01 18:00", "主厅", saleMode),
                 new SessionOption(id * 10 + 2, startTime.replace("19:30", "14:30").replace("19:00", "14:30"), "2026-07-27 10:00", "2026-08-02 18:00", "加场厅", saleMode)
@@ -275,6 +311,55 @@ public class DemoDataService {
                 new TicketLevel(id * 100 + 3, "臻享票", "C区", priceMax, 30)
         ));
         return card;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyPerformancePayload(PerformanceCard card, Map<String, Object> payload) {
+        card.setTitle(str(payload, "title", "未命名演出"));
+        card.setSubtitle(str(payload, "subtitle", str(payload, "summary", "请填写演出亮点")));
+        card.setSummary(str(payload, "summary", card.getSubtitle()));
+        card.setCategoryCode(str(payload, "categoryCode", "concert"));
+        card.setCategoryName(str(payload, "categoryName", categoryName(card.getCategoryCode())));
+        card.setVenueId(longValue(payload, "venueId", card.getVenueId()));
+        card.setCity(str(payload, "city", "上海"));
+        card.setVenue(str(payload, "venue", "待设置场馆"));
+        card.setAddress(str(payload, "address", "待设置地址"));
+        card.setStartTime(str(payload, "startTime", "2026-08-01 19:30"));
+        card.setPriceMin(intValue(payload, "priceMin", 180));
+        card.setPriceMax(intValue(payload, "priceMax", Math.max(card.getPriceMin(), 680)));
+        card.setPoster(str(payload, "poster", "/uploads/posters/performance/poster-101.svg"));
+        card.setBanner(str(payload, "banner", card.getPoster()));
+        card.setDetailImage(str(payload, "detailImage", ""));
+        card.setSaleStatus(str(payload, "saleStatus", "COMING_SOON"));
+        card.setSaleMode(str(payload, "saleMode", "SELECTABLE"));
+        card.setTags(stringList(payload.get("tags")));
+        card.setIntro(str(payload, "intro", card.getSummary()));
+        card.setArtistInfo(str(payload, "artistInfo", "演职人员信息待补充。"));
+        card.setVenueIntro(str(payload, "venueIntro", card.getVenue() + "，" + card.getAddress()));
+        card.setPurchaseNotice(str(payload, "purchaseNotice", "请确认场次、票档、数量和观演人信息后下单。"));
+        card.setRefundRule(str(payload, "refundRule", "退票规则以本页面公示和订单规则为准。"));
+        card.setEntryRule(str(payload, "entryRule", "请携带有效身份证件或电子票二维码入场。"));
+        card.setPublishStatus(str(payload, "publishStatus", "DRAFT"));
+        Object blocks = payload.get("detailBlocks");
+        if (blocks instanceof List<?>) {
+            card.setDetailBlocks(((List<?>) blocks).stream()
+                    .filter(Map.class::isInstance)
+                    .map(item -> Map.copyOf((Map<String, Object>) item))
+                    .toList());
+        } else {
+            card.setDetailBlocks(List.of(
+                    Map.of("type", "HEADING", "content", "项目介绍"),
+                    Map.of("type", "PARAGRAPH", "content", card.getIntro())
+            ));
+        }
+    }
+
+    private String categoryName(String code) {
+        return categories.stream()
+                .filter(item -> Objects.equals(item.code(), code))
+                .map(Category::name)
+                .findFirst()
+                .orElse("演出");
     }
 
     private void seedMovies() {
@@ -317,6 +402,43 @@ public class DemoDataService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String str(Map<String, Object> payload, String key, String fallback) {
+        Object value = payload.get(key);
+        return value == null || String.valueOf(value).isBlank() ? fallback : String.valueOf(value);
+    }
+
+    private Long longValue(Map<String, Object> payload, String key, Long fallback) {
+        Object value = payload.get(key);
+        if (value == null || String.valueOf(value).isBlank()) {
+            return fallback;
+        }
+        return Long.valueOf(String.valueOf(value));
+    }
+
+    private int intValue(Map<String, Object> payload, String key, int fallback) {
+        Object value = payload.get(key);
+        if (value == null || String.valueOf(value).isBlank()) {
+            return fallback;
+        }
+        return Double.valueOf(String.valueOf(value)).intValue();
+    }
+
+    private List<String> stringList(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(String::valueOf)
+                    .filter(item -> !item.isBlank())
+                    .toList();
+        }
+        if (value == null || String.valueOf(value).isBlank()) {
+            return List.of("电子票", "实名制");
+        }
+        return List.of(String.valueOf(value).split(",")).stream()
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .toList();
     }
 
     private String maskIdCard(String idCard) {

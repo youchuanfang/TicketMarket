@@ -1,7 +1,10 @@
 package com.ticketmarket.controller;
 
 import com.ticketmarket.common.Result;
+import com.ticketmarket.model.PerformanceCard;
+import com.ticketmarket.service.PersistentPerformanceService;
 import com.ticketmarket.service.Phase3ResourceService;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -10,17 +13,110 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin")
 public class Phase3AdminController {
     private final Phase3ResourceService service;
+    private final PersistentPerformanceService performanceService;
 
-    public Phase3AdminController(Phase3ResourceService service) {
+    public Phase3AdminController(Phase3ResourceService service, PersistentPerformanceService performanceService) {
         this.service = service;
+        this.performanceService = performanceService;
+    }
+
+    @GetMapping("/performances")
+    public Result<List<PerformanceCard>> performances() {
+        return Result.ok(performanceService.adminPerformances());
+    }
+
+    @GetMapping("/performances/{id}")
+    public Result<PerformanceCard> performance(@PathVariable Long id) {
+        return Result.ok(performanceService.adminPerformance(id));
+    }
+
+    @PostMapping("/performances")
+    public Result<PerformanceCard> createPerformance(@RequestBody Map<String, Object> payload) {
+        return Result.ok(performanceService.createPerformance(payload));
+    }
+
+    @PutMapping("/performances/{id}")
+    public Result<PerformanceCard> updatePerformance(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return Result.ok(performanceService.updatePerformance(id, payload));
+    }
+
+    @PutMapping("/performances/{id}/publish")
+    public Result<PerformanceCard> publishPerformance(@PathVariable Long id) {
+        return Result.ok(performanceService.publish(id));
+    }
+
+    @PutMapping("/performances/{id}/offline")
+    public Result<PerformanceCard> offlinePerformance(@PathVariable Long id) {
+        return Result.ok(performanceService.offline(id));
+    }
+
+    @DeleteMapping("/performances/{id}")
+    public Result<Void> deletePerformance(@PathVariable Long id) {
+        performanceService.deletePerformance(id);
+        return Result.ok();
+    }
+
+    @GetMapping("/performances/{id}/detail-blocks")
+    public Result<List<Map<String, Object>>> detailBlocks(@PathVariable Long id) {
+        return Result.ok(performanceService.detailBlocks(id));
+    }
+
+    @PostMapping("/performances/{id}/detail-blocks")
+    public Result<Map<String, Object>> createDetailBlock(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return Result.ok(performanceService.createDetailBlock(id, payload));
+    }
+
+    @PutMapping("/performance-detail-blocks/{blockId}")
+    public Result<Map<String, Object>> updateDetailBlock(@PathVariable Long blockId, @RequestBody Map<String, Object> payload) {
+        return Result.ok(performanceService.updateDetailBlock(blockId, payload));
+    }
+
+    @DeleteMapping("/performance-detail-blocks/{blockId}")
+    public Result<Void> deleteDetailBlock(@PathVariable Long blockId) {
+        performanceService.deleteDetailBlock(blockId);
+        return Result.ok();
+    }
+
+    @PutMapping("/performances/{id}/detail-blocks/reorder")
+    public Result<List<Map<String, Object>>> reorderDetailBlocks(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return Result.ok(performanceService.reorderDetailBlocks(id, payload));
+    }
+
+    @PostMapping(value = "/upload/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<Map<String, Object>> uploadImage(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("请选择图片文件");
+        }
+        String originalName = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        String suffix = "";
+        int dot = originalName.lastIndexOf('.');
+        if (dot >= 0) {
+            suffix = originalName.substring(dot).toLowerCase(Locale.ROOT);
+        }
+        if (!List.of(".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg").contains(suffix)) {
+            suffix = ".jpg";
+        }
+        Path dir = Paths.get("..", "uploads", "admin").normalize();
+        Files.createDirectories(dir);
+        String filename = UUID.randomUUID().toString().replace("-", "") + suffix;
+        Path target = dir.resolve(filename);
+        file.transferTo(target);
+        return Result.ok(Map.of("path", "/uploads/admin/" + filename));
     }
 
     @GetMapping("/venues")

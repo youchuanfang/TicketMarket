@@ -2,6 +2,23 @@ import { http } from './http'
 
 export const adminApi = {
   dashboard: () => http.get('/api/admin/dashboard'),
+  performances: () => http.get('/api/admin/performances'),
+  performance: (id) => http.get(`/api/admin/performances/${id}`),
+  createPerformance: (payload) => http.post('/api/admin/performances', payload),
+  updatePerformance: (id, payload) => http.put(`/api/admin/performances/${id}`, payload),
+  deletePerformance: (id) => http.delete(`/api/admin/performances/${id}`),
+  publishPerformance: (id) => http.put(`/api/admin/performances/${id}/publish`),
+  offlinePerformance: (id) => http.put(`/api/admin/performances/${id}/offline`),
+  detailBlocks: (id) => http.get(`/api/admin/performances/${id}/detail-blocks`),
+  createDetailBlock: (id, payload) => http.post(`/api/admin/performances/${id}/detail-blocks`, payload),
+  updateDetailBlock: (id, payload) => http.put(`/api/admin/performance-detail-blocks/${id}`, payload),
+  deleteDetailBlock: (id) => http.delete(`/api/admin/performance-detail-blocks/${id}`),
+  reorderDetailBlocks: (id, ids) => http.put(`/api/admin/performances/${id}/detail-blocks/reorder`, { ids }),
+  uploadImage: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return http.post('/api/admin/upload/image', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
   venues: () => http.get('/api/admin/venues'),
   createVenue: (payload) => http.post('/api/admin/venues', payload),
   updateVenue: (id, payload) => http.put(`/api/admin/venues/${id}`, payload),
@@ -14,12 +31,17 @@ export const adminApi = {
   updateSeat: (id, payload) => http.put(`/api/admin/seats/${id}`, payload),
   sessions: () => http.get('/api/admin/sessions'),
   createSession: (payload) => http.post('/api/admin/sessions', payload),
+  updateSession: (id, payload) => http.put(`/api/admin/sessions/${id}`, payload),
+  deleteSession: (id) => http.delete(`/api/admin/sessions/${id}`),
   initSessionSeats: (sessionId) => http.post(`/api/admin/sessions/${sessionId}/init-seats`),
   sessionSeats: (sessionId) => http.get(`/api/admin/sessions/${sessionId}/seats`),
   ticketLevels: (sessionId) => http.get(`/api/admin/sessions/${sessionId}/ticket-levels`),
   createTicketLevel: (payload) => http.post('/api/admin/ticket-levels', payload),
+  updateTicketLevel: (id, payload) => http.put(`/api/admin/ticket-levels/${id}`, payload),
+  deleteTicketLevel: (id) => http.delete(`/api/admin/ticket-levels/${id}`),
   saleBatches: () => http.get('/api/admin/sale-batches'),
   createSaleBatch: (payload) => http.post('/api/admin/sale-batches', payload),
+  updateSaleBatch: (id, payload) => http.put(`/api/admin/sale-batches/${id}`, payload),
   startBatch: (id) => http.post(`/api/admin/sale-batches/${id}/start`),
   lockBatch: (id) => http.post(`/api/admin/sale-batches/${id}/lock`),
   initRedisStock: (id) => http.post(`/api/admin/sale-batches/${id}/init-redis-stock`),

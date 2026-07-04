@@ -1,148 +1,133 @@
 # 数据库设计说明
 
-数据库名：`ticket_market`。初始化脚本位于 `data/schema.sql`。
+数据库名：`ticket_market`。初始化脚本：`data/schema.sql`。
 
-当前演示版本以内置数据和 Redis 库存为主，`data/schema.sql` 提供课程设计所需的持久化表结构；后续接入 MySQL 时可按本文表分组落库。
+## 演出发布相关表
 
-## 设计原则
+### performance
 
-- 不使用 `order` 作为表名，订单表使用 `ticket_order`。
-- 每张业务表包含 `id`、`created_at`、`updated_at`。
-- 需要软删除的表增加 `deleted` 字段，`0` 表示正常，`1` 表示已删除。
-- 关键状态字段使用明确枚举字符串，便于课程答辩时解释业务状态。
-- 抢票并发阶段使用 Redis 保存当前批次库存，MySQL 保存最终订单和请求记录。
+保存管理员发布的演出主档案。前台只读取 `publish_status = PUBLISHED` 且 `deleted = 0` 的记录。
 
-## 核心表分组
+关键字段：
 
-用户与权限：
+- `title` / `subtitle`
+- `category_id` / `category_name`
+- `city_id` / `city_name`
+- `venue_id` / `venue_name` / `address`
+- `poster_path` / `banner_path` / `detail_image_path`
+- `price_min` / `price_max`
+- `summary` / `introduction` / `detail_content`
+- `artist_intro` / `venue_intro`
+- `purchase_notice` / `refund_notice` / `entry_notice`
+- `service_tags`
+- `purchase_mode`
+- `publish_status`: `DRAFT`、`PUBLISHED`、`OFFLINE`
+- `status`: 前台售卖展示状态，例如 `COMING_SOON`、`ON_SALE`、`LOCKED`
+- `start_time`
+- `created_at` / `updated_at` / `deleted`
 
-- `user`
-- `role`
-- `user_role`
-- `real_name_auth`
-- `viewer`
+### performance_detail_block
 
-门户内容：
+保存详情页排版块。前台按 `sort_order` 渲染。
 
-- `city`
-- `performance_category`
-- `banner`
-- `home_section`
-- `home_section_item`
-- `performance`
-- `performance_artist`
-- `movie`
-- `movie_cast`
+字段：
 
-场馆与座位：
+- `performance_id`
+- `block_type`: `TITLE`、`PARAGRAPH`、`IMAGE`
+- `title`
+- `content`
+- `image_path`
+- `sort_order`
+- `created_at` / `updated_at` / `deleted`
 
-- `venue`
-- `venue_area`
-- `seat`
-- `performance_session`
-- `ticket_level`
-- `session_seat`
+## 场馆与座位
 
-售票批次和库存：
+- `venue`: 场馆名称、城市、地址、容量、介绍、启用状态。
+- `venue_area`: 区域名称、类型、默认票档、颜色和排序。
+- `seat`: 座位坐标、排号、座号、座位标签、禁用状态。
+- `session_seat`: 某个场次下的座位状态，包含 `AVAILABLE`、`LOCKED`、`SOLD`、`DISABLED` 等。
 
-- `sale_batch`
-- `sale_batch_ticket_level`
-- `sale_batch_seat`
-- `stock_pool`
-- `rush_request`
+## 场次、票档、批次
 
-订单、支付和电子票：
+### performance_session
 
-- `ticket_order`
-- `order_item`
-- `payment_record`
-- `e_ticket`
+持久化演出场次：
 
-退票与检票：
+- `performance_id`
+- `venue_id`
+- `session_name`
+- `sale_start_time`
+- `lock_time`
+- `entry_time`
+- `start_time`
+- `end_time`
+- `purchase_mode`
+- `status`
 
-- `refund_apply`
-- `refund_record`
-- `checkin_record`
+### ticket_level
 
-运营与风控：
+持久化票档和库存：
 
-- `reservation_remind`
-- `favorite`
-- `browse_history`
-- `message`
-- `announcement`
-- `operation_log`
-- `risk_log`
-- `blacklist`
-- `search_history`
-- `hot_search`
+- `session_id`
+- `area_id`
+- `price`
+- `total_stock`
+- `released_stock`
+- `unreleased_stock`
+- `sold_stock`
+- `locked_stock`
+- `refunded_stock`
+- `status`
 
-## 主要枚举
+### sale_batch
 
-购票模式 `sale_mode`：
+持久化开售批次：
 
-- `SELECTABLE`：支持自主选座
-- `AUTO_ALLOCATE`：不支持选座，系统自动分配座位
-- `AREA_ONLY`：只选票档或区域
-- `STANDING`：站席，无具体座位
+- `session_id`
+- `batch_name`
+- `sale_start_time`
+- `lock_time`
+- `release_type`
+- `release_quantity`
+- `release_ratio`
+- `purchase_limit`
+- `enable_queue`
+- `status`: `NOT_STARTED`、`SELLING`、`LOCKED`、`CLOSED`
 
-抢票请求状态 `rush_request.status`：
+后端启动或查询时会根据 `sale_start_time` 和 `lock_time` 自动刷新批次状态：到开售时间后从 `NOT_STARTED` 变为 `SELLING`，到锁票时间后从 `SELLING` 变为 `LOCKED`。Redis 库存可通过后台“初始化库存”重新从 MySQL 票档和批次计算写入。
 
-- `WAITING`
-- `PROCESSING`
-- `SUCCESS`
-- `FAILED`
-- `SOLD_OUT`
-- `DUPLICATE`
-- `NOT_STARTED`
-- `LOCKED`
-- `LIMITED`
-- `NO_AUTH`
-- `NETWORK_UNKNOWN`
+## 订单、支付、出票、退票、检票
 
-订单状态 `ticket_order.status`：
+- `ticket_order`: 订单主表，保存订单状态和金额。
+- `order_item`: 订单明细，关联票档、座位和观演人。
+- `payment_record`: 模拟支付记录。
+- `e_ticket`: 电子票，保存票号、二维码内容和票状态。
+- `refund_apply`: 退票申请。
+- `refund_record`: 退票处理记录。
+- `checkin_record`: 检票记录。
+
+订单状态：
 
 - `PENDING_PAYMENT`
 - `PAID`
 - `TICKET_ISSUED`
 - `CANCELLED`
-- `TIMEOUT_CLOSED`
 - `REFUND_APPLYING`
 - `REFUNDED`
 - `CHECKED_IN`
-- `FAILED`
 
-电子票状态 `e_ticket.status`：
+电子票状态：
 
 - `UNUSED`
 - `CHECKED_IN`
 - `REFUNDED`
 - `INVALID`
-- `EXPIRED`
 
-座位状态 `session_seat.status`：
+## 初始化策略
 
-- `UNOPENED`
-- `AVAILABLE`
-- `LOCKED`
-- `SOLD`
-- `SELECTED`
-- `UNAVAILABLE`
-- `RECYCLED_AFTER_LOCK`
+`DemoDataService` 不再作为后台新增数据的数据源。它只提供演示账号、电影和初始演出素材。应用启动时：
 
-售票批次状态 `sale_batch.status`：
-
-- `NOT_STARTED`
-- `SELLING`
-- `LOCKED`
-- `CLOSED`
-
-前台展示状态由当前时间、售卖截止时间、批次和库存统一计算，不直接把后台批次状态暴露给用户：
-
-- `RESERVABLE`：未开售或存在下一轮，可预约抢票
-- `ON_SALE`：正在售卖且有库存
-- `SOLD_OUT`：售卖期内但无可售库存
-- `ENDED`：售卖期结束且无下一轮
-- `UNAVAILABLE`：无可用售卖配置
-
-`reservation_remind` 用于保存开售前的预约信息，只记录场次、票档、数量、观演人和提醒状态，不生成订单、不扣减库存、不锁定座位。
+1. `DatabaseSchemaInitializer` 创建或补齐 MySQL 表字段。
+2. `PersistentPerformanceService` 检查 `performance` 是否为空，为空才导入演示演出。
+3. `Phase3ResourceService` 检查场馆和场次相关表是否为空，为空才导入演示场馆、座位、场次、票档和批次。
+4. 如果表内已有管理员创建的数据，启动流程不会清空或覆盖。

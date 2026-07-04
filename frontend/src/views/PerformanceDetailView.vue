@@ -59,13 +59,22 @@
       <el-tabs>
         <el-tab-pane label="项目详情">
           <div class="rich-detail">
-            <img v-if="detail.detailImage" :src="detail.detailImage" :alt="detail.title" />
-            <h2>项目介绍</h2>
-            <p>{{ detail.intro }}</p>
-            <h2>演职人员</h2>
-            <p>{{ detail.artistInfo }}</p>
-            <h2>场馆介绍</h2>
-            <p>{{ detail.venueIntro }}</p>
+            <template v-if="detailBlocks.length">
+              <template v-for="(block, index) in detailBlocks" :key="index">
+                <h2 v-if="block.type === 'HEADING'">{{ block.content }}</h2>
+                <img v-else-if="block.type === 'IMAGE'" :src="block.content" :alt="block.alt || detail.title" />
+                <p v-else>{{ block.content }}</p>
+              </template>
+            </template>
+            <template v-else>
+              <img v-if="detail.detailImage" :src="detail.detailImage" :alt="detail.title" />
+              <h2>项目介绍</h2>
+              <p>{{ detail.intro }}</p>
+              <h2>演职人员</h2>
+              <p>{{ detail.artistInfo }}</p>
+              <h2>场馆介绍</h2>
+              <p>{{ detail.venueIntro }}</p>
+            </template>
           </div>
         </el-tab-pane>
         <el-tab-pane label="购票须知"><p>{{ detail.purchaseNotice }}</p><p>{{ detail.refundRule }}</p></el-tab-pane>
@@ -105,6 +114,7 @@ const modeMap = {
 
 const statusText = computed(() => statusMap[detail.value?.saleStatus] || '')
 const modeText = computed(() => modeMap[detail.value?.saleMode] || '')
+const detailBlocks = computed(() => detail.value?.detailBlocks || [])
 const modeLabel = (mode) => modeMap[mode] || mode
 const actionText = computed(() => selectedSaleStatus.value.buttonText || '请选择场次')
 const buyDisabled = computed(() => !selectedSaleStatus.value.clickable)

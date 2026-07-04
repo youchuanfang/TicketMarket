@@ -5,6 +5,7 @@ import com.ticketmarket.model.Category;
 import com.ticketmarket.model.MovieCard;
 import com.ticketmarket.model.PerformanceCard;
 import com.ticketmarket.service.DemoDataService;
+import com.ticketmarket.service.PersistentPerformanceService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,14 +20,16 @@ import java.util.Map;
 @RequestMapping("/api/portal")
 public class PortalController {
     private final DemoDataService dataService;
+    private final PersistentPerformanceService performanceService;
 
-    public PortalController(DemoDataService dataService) {
+    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService) {
         this.dataService = dataService;
+        this.performanceService = performanceService;
     }
 
     @GetMapping("/home")
     public Result<Map<String, Object>> home() {
-        List<PerformanceCard> all = dataService.performances();
+        List<PerformanceCard> all = performanceService.publicPerformances();
         List<PerformanceCard> hot = all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(5).toList();
         List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(4).toList();
         List<PerformanceCard> inventoryUpdates = all.stream().filter(item -> "RETURNED".equals(item.getSaleStatus()) || "LOCKED".equals(item.getSaleStatus())).limit(4).toList();
@@ -62,8 +65,17 @@ public class PortalController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String status
     ) {
-        List<PerformanceCard> performances = dataService.search(keyword, city, category, status)
+        List<PerformanceCard> performances = performanceService.publicPerformances()
                 .stream()
+                .filter(item -> keyword == null || keyword.isBlank()
+                        || item.getTitle().toLowerCase().contains(keyword.trim().toLowerCase())
+                        || item.getVenue().toLowerCase().contains(keyword.trim().toLowerCase())
+                        || item.getCategoryName().toLowerCase().contains(keyword.trim().toLowerCase()))
+                .filter(item -> city == null || city.isBlank() || item.getCity().equals(city))
+                .filter(item -> category == null || category.isBlank()
+                        || item.getCategoryCode().equals(category)
+                        || item.getCategoryName().equals(category))
+                .filter(item -> status == null || status.isBlank() || item.getSaleStatus().equals(status))
                 .sorted(Comparator.comparing(PerformanceCard::getStartTime))
                 .toList();
         return Result.ok(Map.of(
@@ -78,7 +90,7 @@ public class PortalController {
 
     @GetMapping("/performances/{id}")
     public Result<PerformanceCard> performanceDetail(@PathVariable Long id) {
-        return Result.ok(dataService.performance(id));
+        return Result.ok(performanceService.publicPerformance(id));
     }
 
     @GetMapping("/movies/{id}")
