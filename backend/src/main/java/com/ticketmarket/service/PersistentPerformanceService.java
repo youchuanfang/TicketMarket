@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -103,6 +104,7 @@ public class PersistentPerformanceService {
     public PerformanceCard createPerformance(Map<String, Object> payload) {
         Long id = insertPerformance(payload, str(payload, "publishStatus", "DRAFT"));
         replaceDetailBlocks(id, blocks(payload));
+        syncPublishingResources(id, payload);
         return adminPerformance(id);
     }
 
@@ -150,6 +152,7 @@ public class PersistentPerformanceService {
         if (payload.containsKey("detailBlocks")) {
             replaceDetailBlocks(id, blocks(payload));
         }
+        syncPublishingResources(id, payload);
         return adminPerformance(id);
     }
 
@@ -291,6 +294,266 @@ public class PersistentPerformanceService {
                     "sortOrder", i + 1
             ));
         }
+    }
+
+    private void syncPublishingResources(Long performanceId, Map<String, Object> payload) {
+        List<String> dates = publishingDates(payload);
+        List<Map<String, Object>> levels = publishingTicketLevels(payload);
+        if (dates.isEmpty() || levels.isEmpty()) return;
+
+        Long venueId = ensurePublishingVenue(payload);
+        jdbcTemplate.update("update performance set venue_id=? where id=? and deleted=0", venueId, performanceId);
+
+        Map<String, Long> areaIds = new LinkedHashMap<>();
+        for (int i = 0; i < levels.size(); i++) {
+            Map<String, Object> level = levels.get(i);
+            String areaName = publishingAreaName(level, venueId);
+            Long areaId = ensurePublishingArea(venueId, areaName, str(level, "areaType", "SEATED"), str(level, "name", "标准票"), i + 1);
+            areaIds.put(areaName, areaId);
+            ensureAreaSeats(venueId, areaId, intValue(level, "totalStock", 0), areaName);
+        }
+
+        for (String startTime : dates) {
+            Long sessionId = ensurePublishingSession(performanceId, venueId, payload, startTime);
+            for (Map<String, Object> level : levels) {
+                Long areaId = areaIds.get(publishingAreaName(level, venueId));
+                ensurePublishingTicketLevel(sessionId, areaId, level);
+            }
+            ensurePublishingBatch(sessionId, payload, startTime, levels);
+            ensureSessionSeats(sessionId, venueId);
+        }
+    }
+
+    private List<String> publishingDates(Map<String, Object> payload) {
+        List<String> values = new ArrayList<>();
+        addDate(values, str(payload, "startTime", ""));
+        Object sessionDates = payload.get("sessionDates");
+        if (sessionDates instanceof List<?> list) {
+            for (Object value : list) addDate(values, String.valueOf(value));
+        }
+        for (String line : str(payload, "sessionDatesText", "").split("\\R")) {
+            addDate(values, line);
+        }
+        return values.stream().distinct().toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> publishingTicketLevels(Map<String, Object> payload) {
+        Object raw = payload.get("quickTicketLevels");
+        if (!(raw instanceof List<?> list)) return List.of();
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
+                .filter(item -> intValue(item, "price", 0) > 0 && intValue(item, "totalStock", 0) > 0)
+                .toList();
+    }
+
+    private void addDate(List<String> values, String value) {
+        String normalized = normalizeDateTime(value);
+        if (!normalized.isBlank()) values.add(normalized);
+    }
+
+    private String normalizeDateTime(String value) {
+        String text = value == null ? "" : value.trim();
+        if (text.isBlank()) return "";
+        if (text.matches("\\d{4}-\\d{2}-\\d{2}")) return text + " 19:30:00";
+        if (text.matches("\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}")) return text + ":00";
+        return text;
+    }
+
+    private Long ensurePublishingVenue(Map<String, Object> payload) {
+        Long venueId = longValue(payload, "venueId", null);
+        if (venueId != null && exists("select count(*) from venue where id=? and deleted=0", venueId)) {
+            return venueId;
+        }
+        String name = str(payload, "venue", str(payload, "venueName", "临时场馆"));
+        String city = str(payload, "city", str(payload, "cityName", "上海"));
+        String address = str(payload, "address", "待完善地址");
+        List<Long> existing = jdbcTemplate.queryForList("""
+                select id from venue
+                where deleted=0 and name=? and city_name=?
+                order by id limit 1
+                """, Long.class, name, city);
+        if (!existing.isEmpty()) return existing.get(0);
+        String venueType = inferVenueType(name, str(payload, "categoryName", ""), str(payload, "saleMode", ""));
+        jdbcTemplate.update("""
+                insert into venue
+                (city_id, city_name, name, address, intro, description, venue_type, stage_label, capacity, status, created_at, updated_at, deleted)
+                values (0, ?, ?, ?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
+                """, city, name, address, str(payload, "venueIntro", ""), str(payload, "venueIntro", ""),
+                venueType, "CINEMA".equals(venueType) ? "银幕" : "舞台", venueCapacity(venueType));
+        return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
+    }
+
+    private String inferVenueType(String venueName, String categoryName, String saleMode) {
+        String text = (venueName + " " + categoryName + " " + saleMode).toLowerCase(Locale.ROOT);
+        if (text.contains("影院") || text.contains("影城") || text.contains("电影")) return "CINEMA";
+        if (text.contains("体育") || text.contains("鸟巢") || text.contains("演唱会") || text.contains("内场")) return "STADIUM";
+        return "THEATER";
+    }
+
+    private int venueCapacity(String venueType) {
+        return switch (venueType) {
+            case "STADIUM" -> 5000;
+            case "CINEMA" -> 200;
+            default -> 800;
+        };
+    }
+
+    private Long ensurePublishingArea(Long venueId, String name, String type, String levelName, int sortOrder) {
+        List<Long> existing = jdbcTemplate.queryForList("""
+                select id from venue_area
+                where venue_id=? and name=? and deleted=0
+                order by id limit 1
+                """, Long.class, venueId, name);
+        if (!existing.isEmpty()) return existing.get(0);
+        jdbcTemplate.update("""
+                insert into venue_area
+                (venue_id, name, area_type, default_ticket_level, sort_order, color, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, 'ENABLED', now(), now(), 0)
+                """, venueId, name, type, levelName, sortOrder, "STANDING".equals(type) ? "#ff6b6b" : "#74c0fc");
+        return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
+    }
+
+    private String publishingAreaName(Map<String, Object> level, Long venueId) {
+        String type = str(level, "areaType", "SEATED");
+        String venueType = jdbcTemplate.queryForObject("select venue_type from venue where id=?", String.class, venueId);
+        if ("STADIUM".equals(venueType)) return "STANDING".equals(type) ? "内场" : "看台";
+        if ("CINEMA".equals(venueType)) return "座位区";
+        return "座位区";
+    }
+
+    private void ensureAreaSeats(Long venueId, Long areaId, int totalStock, String areaName) {
+        Integer existing = jdbcTemplate.queryForObject("select count(*) from seat where venue_id=? and area_id=? and deleted=0", Integer.class, venueId, areaId);
+        int target = Math.max(1, Math.min(totalStock, 2000));
+        if (existing != null && existing >= target) return;
+        int start = existing == null ? 0 : existing;
+        for (int i = start; i < target; i++) {
+            int row = (i / 20) + 1;
+            int number = (i % 20) + 1;
+            String label = areaName + "-" + row + "排" + number + "座";
+            jdbcTemplate.update("""
+                    insert into seat
+                    (venue_id, area_id, row_no, seat_no, seat_label, x, y, is_aisle, is_disabled, status, created_at, updated_at, deleted)
+                    values (?, ?, ?, ?, ?, ?, ?, 0, 0, 'AVAILABLE', now(), now(), 0)
+                    """, venueId, areaId, String.valueOf(row), String.valueOf(number), label,
+                    40 + (number - 1) * 28, 60 + (row - 1) * 26);
+        }
+    }
+
+    private Long ensurePublishingSession(Long performanceId, Long venueId, Map<String, Object> payload, String startTime) {
+        List<Long> existing = jdbcTemplate.queryForList("""
+                select id from performance_session
+                where performance_id=? and start_time=? and deleted=0
+                order by id limit 1
+                """, Long.class, performanceId, Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER)));
+        String sessionName = str(payload, "title", "演出") + " " + startTime.substring(5, 16);
+        Timestamp saleStart = timeFromText(str(payload, "quickSaleStartTime", str(payload, "startTime", startTime)));
+        Timestamp lockTime = timeFromText(str(payload, "quickLockTime", ""));
+        if (lockTime == null) lockTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).minusHours(1));
+        Timestamp entryTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).minusHours(1));
+        Timestamp endTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).plusHours(2));
+        String mode = str(payload, "saleMode", str(payload, "purchaseMode", "AUTO_ALLOCATE"));
+        if (!existing.isEmpty()) {
+            Long id = existing.get(0);
+            jdbcTemplate.update("""
+                    update performance_session
+                    set venue_id=?, session_name=?, hall_name=?, sale_start_time=?, lock_time=?, entry_time=?,
+                        end_time=?, sale_mode=?, purchase_mode=?, status='SCHEDULED', updated_at=now()
+                    where id=? and deleted=0
+                    """, venueId, sessionName, sessionName, saleStart, lockTime, entryTime, endTime, mode, mode, id);
+            return id;
+        }
+        jdbcTemplate.update("""
+                insert into performance_session
+                (performance_id, venue_id, session_name, hall_name, sale_start_time, lock_time, entry_time, start_time, end_time,
+                 sale_mode, purchase_mode, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', now(), now(), 0)
+                """, performanceId, venueId, sessionName, sessionName, saleStart, lockTime, entryTime,
+                Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER)), endTime, mode, mode);
+        return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
+    }
+
+    private void ensurePublishingTicketLevel(Long sessionId, Long areaId, Map<String, Object> level) {
+        String name = str(level, "name", "标准票");
+        BigDecimal price = decimalValue(level, "price", BigDecimal.ZERO);
+        int total = intValue(level, "totalStock", 0);
+        int released = intValue(level, "releasedStock", total);
+        List<Long> existing = jdbcTemplate.queryForList("""
+                select id from ticket_level
+                where session_id=? and (name=? or price=?) and deleted=0
+                order by case when name=? then 0 else 1 end, id limit 1
+                """, Long.class, sessionId, name, price, name);
+        if (!existing.isEmpty()) {
+            jdbcTemplate.update("""
+                    update ticket_level
+                    set name=?, area_id=?, price=?, total_stock=?, released_stock=?, unreleased_stock=?, status='ENABLED', updated_at=now()
+                    where id=? and deleted=0
+                    """, name, areaId, price, total, released, Math.max(0, total - released), existing.get(0));
+            return;
+        }
+        jdbcTemplate.update("""
+                insert into ticket_level
+                (session_id, name, area_id, price, total_stock, released_stock, unreleased_stock, sold_stock,
+                 locked_stock, refunded_stock, status, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'ENABLED', now(), now(), 0)
+                """, sessionId, name, areaId, price, total, released, Math.max(0, total - released));
+    }
+
+    private void ensurePublishingBatch(Long sessionId, Map<String, Object> payload, String startTime, List<Map<String, Object>> levels) {
+        int releaseQuantity = intValue(payload, "quickBatchReleaseQuantity", 0);
+        if (releaseQuantity <= 0) {
+            releaseQuantity = levels.stream().mapToInt(item -> intValue(item, "releasedStock", intValue(item, "totalStock", 0))).sum();
+        }
+        Timestamp saleStart = timeFromText(str(payload, "quickSaleStartTime", str(payload, "startTime", startTime)));
+        Timestamp lockTime = timeFromText(str(payload, "quickLockTime", ""));
+        if (lockTime == null) lockTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).minusHours(1));
+        List<Long> existing = jdbcTemplate.queryForList("""
+                select id from sale_batch
+                where session_id=? and deleted=0
+                order by id limit 1
+                """, Long.class, sessionId);
+        if (!existing.isEmpty()) {
+            jdbcTemplate.update("""
+                    update sale_batch
+                    set name='第一批开售', batch_name='第一批开售', sale_start_time=?, lock_time=?,
+                        open_mode='QUANTITY', release_type='QUANTITY', open_stock=?, release_quantity=?,
+                        limit_per_user=2, purchase_limit=2, queue_enabled=1, enable_queue=1, updated_at=now()
+                    where id=? and deleted=0
+                    """, saleStart, lockTime, releaseQuantity, releaseQuantity, existing.get(0));
+            return;
+        }
+        jdbcTemplate.update("""
+                insert into sale_batch
+                (session_id, name, batch_name, sale_start_time, lock_time, open_mode, release_type, open_stock,
+                 release_quantity, release_ratio, allow_return_current_round, allow_return_during_sale,
+                 limit_per_user, purchase_limit, queue_enabled, enable_queue, status, created_at, updated_at, deleted)
+                values (?, '第一批开售', '第一批开售', ?, ?, 'QUANTITY', 'QUANTITY', ?, ?, 0, 1, 1, 2, 2, 1, 1, 'NOT_STARTED', now(), now(), 0)
+                """, sessionId, saleStart, lockTime, releaseQuantity, releaseQuantity);
+    }
+
+    private void ensureSessionSeats(Long sessionId, Long venueId) {
+        Integer existing = jdbcTemplate.queryForObject("select count(*) from session_seat where session_id=?", Integer.class, sessionId);
+        if (existing != null && existing > 0) {
+            jdbcTemplate.update("""
+                    update session_seat ss
+                    join ticket_level tl on tl.session_id=ss.session_id and tl.area_id=ss.area_id and tl.deleted=0
+                    set ss.ticket_level_id=tl.id, ss.updated_at=now()
+                    where ss.session_id=? and ss.status in ('AVAILABLE', 'UNRELEASED', 'DISABLED')
+                    """, sessionId);
+            return;
+        }
+        jdbcTemplate.update("""
+                insert into session_seat
+                (session_id, seat_id, venue_id, area_id, ticket_level_id, batch_id, status, lock_user_id,
+                 lock_expire_time, seat_label, x, y, created_at, updated_at)
+                select ?, s.id, s.venue_id, s.area_id, tl.id, null,
+                       case when s.is_disabled=1 then 'DISABLED' else 'AVAILABLE' end,
+                       null, null, s.seat_label, s.x, s.y, now(), now()
+                from seat s
+                left join ticket_level tl on tl.session_id=? and tl.area_id=s.area_id and tl.deleted=0
+                where s.venue_id=? and s.deleted=0
+                """, sessionId, sessionId, venueId);
     }
 
     private PerformanceCard mapPerformance(ResultSet rs, int rowNum) throws SQLException {
@@ -541,6 +804,17 @@ public class PersistentPerformanceService {
             text = text + ":00";
         }
         return Timestamp.valueOf(LocalDateTime.parse(text, FORMATTER));
+    }
+
+    private Timestamp timeFromText(String value) {
+        String normalized = normalizeDateTime(value);
+        if (normalized.isBlank()) return null;
+        return Timestamp.valueOf(LocalDateTime.parse(normalized, FORMATTER));
+    }
+
+    private boolean exists(String sql, Object... args) {
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, args);
+        return count != null && count > 0;
     }
 
     private Map<String, Object> map(Object... values) {

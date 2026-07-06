@@ -1255,8 +1255,8 @@ async function savePerformance() {
     tags: performanceForm.tagsText.split(',').map((item) => item.trim()).filter(Boolean),
     detailImage: performanceForm.detailBlocks.find((item) => item.type === 'IMAGE' && item.content)?.content || performanceForm.detailImage
   }
-  const saved = payload.id ? await adminApi.updatePerformance(payload.id, payload) : await adminApi.createPerformance(payload)
-  await createQuickSessionsAndTickets(saved)
+  if (payload.id) await adminApi.updatePerformance(payload.id, payload)
+  else await adminApi.createPerformance(payload)
   ElMessage.success('演出已保存')
   performanceDialog.value = false
   await loadAll()
