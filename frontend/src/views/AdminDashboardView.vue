@@ -959,9 +959,37 @@ function resetReactive(target, source) {
   Object.assign(target, source)
 }
 
-function openPerformance(row) {
+async function openPerformance(row) {
   const next = row ? clone(row) : emptyPerformance()
   next.tagsText = (next.tags || []).join(',') || next.tagsText || ''
+  if (row?.id) {
+    const existingSessions = performanceSessions(row.id)
+    if (existingSessions.length) {
+      const orderedSessions = [...existingSessions].sort((a, b) => normalizeDateTime(a.startTime).localeCompare(normalizeDateTime(b.startTime)))
+      const firstSession = orderedSessions[0]
+      next.startTime = normalizeDateTime(firstSession.startTime)
+      next.sessionDates = orderedSessions.map((session) => normalizeDateTime(session.startTime)).filter(Boolean)
+      next.quickSaleStartTime = normalizeDateTime(firstSession.saleStartTime)
+      next.quickLockTime = normalizeDateTime(firstSession.lockTime)
+      next.saleMode = firstSession.purchaseMode || next.saleMode
+      const [levels, sessionAreas] = await Promise.all([
+        adminApi.ticketLevels(firstSession.id),
+        firstSession.venueId ? adminApi.areas(firstSession.venueId) : Promise.resolve([])
+      ])
+      if (levels.length) {
+        next.quickTicketLevels = levels.map((level) => {
+          const area = sessionAreas.find((item) => String(item.id) === String(level.areaId))
+          return {
+            name: level.name,
+            areaType: area?.areaType || 'SEATED',
+            price: Number(level.price || 0),
+            totalStock: Number(level.totalStock || 0),
+            releasedStock: Number(level.releasedStock || 0)
+          }
+        })
+      }
+    }
+  }
   const legacyDates = String(next.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime).filter(Boolean)
   next.sessionDates = Array.isArray(next.sessionDates) && next.sessionDates.length
     ? next.sessionDates.map(normalizeDateTime).filter(Boolean)
@@ -1143,8 +1171,9 @@ async function createQuickSessionsAndTickets(performance) {
     const area = await ensureQuickArea(performanceForm.venueId, levels[i], i)
     areasByName.set(quickAreaName(levels[i]), area)
   }
+  const existingSessions = performanceSessions(performance.id)
   for (const startTime of dateRows) {
-    const session = await adminApi.createSession({
+    const sessionPayload = {
       performanceId: performance.id,
       venueId: performanceForm.venueId,
       sessionName: `${performanceForm.title} ${startTime.slice(5, 16)}`,
@@ -1154,34 +1183,63 @@ async function createQuickSessionsAndTickets(performance) {
       startTime,
       endTime: addHours(startTime, 2),
       purchaseMode: performanceForm.saleMode
-    })
-    for (const level of levels) {
-      const total = Number(level.totalStock || 0)
-      const released = Number(level.releasedStock || total)
-      await adminApi.createTicketLevel({
-        sessionId: session.id,
-        name: level.name,
-        areaId: areasByName.get(quickAreaName(level))?.id,
-        price: Number(level.price || 0),
-        totalStock: total,
-        releasedStock: released,
-        unreleasedStock: Math.max(0, total - released)
-      })
     }
-    const autoReleaseQuantity = levels.reduce((sum, level) => sum + Number(level.releasedStock || level.totalStock || 0), 0)
-    await adminApi.createSaleBatch({
-      sessionId: session.id,
-      batchName: '第一批开售',
-      saleStartTime: normalizeDateTime(performanceForm.quickSaleStartTime || performanceForm.startTime),
-      lockTime: normalizeDateTime(performanceForm.quickLockTime) || addHours(startTime, -1),
-      releaseType: 'QUANTITY',
-      releaseQuantity: Number(performanceForm.quickBatchReleaseQuantity || 0) || autoReleaseQuantity,
-      purchaseLimit: 6,
-      enableQueue: true,
-      allowReturnDuringSale: true
-    })
+    const existingSession = existingSessions.find((session) => normalizeDateTime(session.startTime) === startTime)
+    const session = existingSession
+      ? await adminApi.updateSession(existingSession.id, { ...existingSession, ...sessionPayload })
+      : await adminApi.createSession(sessionPayload)
+    await syncSessionTicketLevels(session, levels, areasByName)
+    await syncFirstSaleBatch(session, levels)
     await adminApi.initSessionSeats(session.id)
   }
+}
+
+async function syncSessionTicketLevels(session, levels, areasByName) {
+  const existingLevels = await adminApi.ticketLevels(session.id)
+  const usedIds = new Set()
+  for (const level of levels) {
+    const areaId = areasByName.get(quickAreaName(level))?.id
+    const price = Number(level.price || 0)
+    const total = Number(level.totalStock || 0)
+    const released = Number(level.releasedStock || total)
+    const payload = {
+      sessionId: session.id,
+      name: level.name,
+      areaId,
+      price,
+      totalStock: total,
+      releasedStock: released,
+      unreleasedStock: Math.max(0, total - released)
+    }
+    const matched = existingLevels.find((item) => !usedIds.has(item.id) && item.name === level.name)
+      || existingLevels.find((item) => !usedIds.has(item.id) && String(item.areaId || '') === String(areaId || '') && Number(item.price) === price)
+      || existingLevels.find((item) => !usedIds.has(item.id) && Number(item.price) === price)
+    if (matched) {
+      usedIds.add(matched.id)
+      await adminApi.updateTicketLevel(matched.id, { ...matched, ...payload })
+    } else {
+      await adminApi.createTicketLevel(payload)
+    }
+  }
+}
+
+async function syncFirstSaleBatch(session, levels) {
+  const existingBatch = saleBatches.value.find((batch) => String(batch.sessionId) === String(session.id))
+  const autoReleaseQuantity = levels.reduce((sum, level) => sum + Number(level.releasedStock || level.totalStock || 0), 0)
+  const payload = {
+    sessionId: session.id,
+    batchName: existingBatch?.batchName || '第一批开售',
+    saleStartTime: normalizeDateTime(performanceForm.quickSaleStartTime || performanceForm.startTime),
+    lockTime: normalizeDateTime(performanceForm.quickLockTime) || addHours(session.startTime, -1),
+    releaseType: 'QUANTITY',
+    releaseQuantity: Number(performanceForm.quickBatchReleaseQuantity || 0) || autoReleaseQuantity,
+    purchaseLimit: existingBatch?.purchaseLimit || 6,
+    enableQueue: true,
+    allowReturnDuringSale: true,
+    status: existingBatch?.status || 'NOT_STARTED'
+  }
+  if (existingBatch) await adminApi.updateSaleBatch(existingBatch.id, { ...existingBatch, ...payload })
+  else await adminApi.createSaleBatch(payload)
 }
 
 async function savePerformance() {
@@ -1197,8 +1255,8 @@ async function savePerformance() {
     tags: performanceForm.tagsText.split(',').map((item) => item.trim()).filter(Boolean),
     detailImage: performanceForm.detailBlocks.find((item) => item.type === 'IMAGE' && item.content)?.content || performanceForm.detailImage
   }
-  const saved = payload.id ? await adminApi.updatePerformance(payload.id, payload) : await adminApi.createPerformance(payload)
-  if (!payload.id) await createQuickSessionsAndTickets(saved)
+  if (payload.id) await adminApi.updatePerformance(payload.id, payload)
+  else await adminApi.createPerformance(payload)
   ElMessage.success('演出已保存')
   performanceDialog.value = false
   await loadAll()
@@ -1278,6 +1336,10 @@ async function clearSeatTemplate(venueId) {
 }
 
 const showSeat = (seat) => ElMessage.info(`${seat.seatLabel}: ${statusText(seat.status)}`)
+
+function performanceSessions(performanceId) {
+  return sessions.value.filter((session) => String(session.performanceId) === String(performanceId))
+}
 
 function openSession(row) {
   resetReactive(sessionForm, row ? { ...emptySession(), ...clone(row) } : emptySession())

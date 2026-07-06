@@ -25,7 +25,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -45,6 +45,13 @@ const categories = ref([])
 const items = ref([])
 const total = ref(0)
 
+const syncFormFromRoute = () => {
+  form.keyword = route.query.keyword || ''
+  form.city = route.query.city || ''
+  form.category = route.query.category || ''
+  form.status = route.query.status || ''
+}
+
 const load = async () => {
   try {
     const data = await searchPerformances(form)
@@ -58,6 +65,11 @@ const load = async () => {
 
 onMounted(async () => {
   categories.value = await getCategories()
+  await load()
+})
+
+watch(() => route.query, async () => {
+  syncFormFromRoute()
   await load()
 })
 </script>
