@@ -8,6 +8,7 @@ import com.ticketmarket.service.DemoDataService;
 import com.ticketmarket.service.PersistentMovieService;
 import com.ticketmarket.service.PersistentPerformanceService;
 import com.ticketmarket.service.Phase3ResourceService;
+import com.ticketmarket.service.HomepageRecommendationService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,52 +28,34 @@ public class PortalController {
     private final PersistentPerformanceService performanceService;
     private final PersistentMovieService movieService;
     private final Phase3ResourceService resourceService;
+    private final HomepageRecommendationService homepageRecommendationService;
 
-    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService, PersistentMovieService movieService, Phase3ResourceService resourceService) {
+    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService, PersistentMovieService movieService, Phase3ResourceService resourceService, HomepageRecommendationService homepageRecommendationService) {
         this.dataService = dataService;
         this.performanceService = performanceService;
         this.movieService = movieService;
         this.resourceService = resourceService;
+        this.homepageRecommendationService = homepageRecommendationService;
     }
 
     @GetMapping("/home")
     public Result<Map<String, Object>> home() {
         List<PerformanceCard> all = performanceService.publicPerformances().stream().map(this::withRealtimeSaleStatus).toList();
-        List<PerformanceCard> featured = all.stream()
-                .filter(item -> Boolean.TRUE.equals(item.getHomeRecommended()))
-                .sorted(Comparator.comparing(item -> item.getHomeSort() == null ? 0 : item.getHomeSort()))
-                .limit(8)
-                .toList();
-        List<PerformanceCard> hot = featured.isEmpty()
-                ? all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(8).toList()
-                : featured;
-        List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(6).toList();
-        List<Map<String, Object>> categorySections = dataService.categories().stream()
-                .filter(category -> !"movie".equals(category.code()))
-                .map(category -> Map.<String, Object>of(
-                        "code", category.code(),
-                        "name", category.name(),
-                        "items", all.stream().filter(item -> Objects.equals(item.getCategoryCode(), category.code())).limit(4).toList()
-                ))
-                .filter(section -> !((List<?>) section.get("items")).isEmpty())
-                .limit(6)
-                .toList();
+        List<MovieCard> movies = movieService.movies();
+        Map<String, Object> recommendations = homepageRecommendationService.portalRecommendations(all, movies);
+        List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(4).toList();
         List<String> hotCities = allCities(all);
         List<String> hotVenues = distinctPerformanceValues(all, false);
         return Result.ok(Map.of(
-                "banners", List.of(
-                        Map.of("title", "夏日城市舞台", "subtitle", "演出、电影、展览一站式发现", "image", "/uploads/banners/banner-01.svg", "targetId", 101),
-                        Map.of("title", "周末剧场计划", "subtitle", "精选场次与舒适票档", "image", "/uploads/banners/banner-02.svg", "targetId", 102),
-                        Map.of("title", "星河音乐现场", "subtitle", "灯光与旋律同步开场", "image", "/uploads/banners/banner-03.svg", "targetId", 103)
-                ),
+                "banners", recommendations.get("banners"),
                 "categories", dataService.categories(),
-                "hot", hot,
+                "hot", recommendations.get("hot"),
                 "comingSoon", coming,
-                "onSale", hot,
-                "categorySections", categorySections,
+                "onSale", all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(4).toList(),
+                "categorySections", recommendations.get("categorySections"),
                 "hotCities", hotCities.isEmpty() ? List.of("上海", "杭州", "南京", "深圳", "北京") : hotCities,
                 "hotVenues", hotVenues.isEmpty() ? List.of("滨江音乐中心", "湖畔剧院", "紫金艺术厅", "云顶体育馆") : hotVenues,
-                "movies", movieService.movies().stream().limit(6).toList()
+                "movies", recommendations.get("movies")
         ));
     }
 
@@ -124,6 +107,11 @@ public class PortalController {
     @GetMapping("/movies/{id}")
     public Result<MovieCard> movieDetail(@PathVariable Long id) {
         return Result.ok(movieService.movie(id));
+    }
+
+    @GetMapping("/movies/{id}/schedule")
+    public Result<Map<String, Object>> movieSchedule(@PathVariable Long id, @RequestParam(required = false) String city) {
+        return Result.ok(movieService.movieSchedule(id, city));
     }
 
     private List<String> allCities(List<PerformanceCard> performances) {

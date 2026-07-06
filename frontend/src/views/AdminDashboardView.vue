@@ -134,6 +134,70 @@
         </el-table>
       </section>
 
+      <section v-else-if="activeSection === 'home-recommendation'" class="admin-card">
+        <div class="table-head">
+          <div>
+            <h2>首页推荐</h2>
+            <p class="section-note">点击左侧板块，再从右侧候选内容中选择，单个板块最多 4 个。顶部轮播图自动使用“热门推荐”的内容。</p>
+          </div>
+          <el-button type="primary" :disabled="!activeHomeSection" @click="saveHomeRecommendation">保存当前板块</el-button>
+        </div>
+        <div class="recommendation-admin">
+          <aside class="recommendation-sections">
+            <button
+              v-for="section in homepageRecommendations"
+              :key="section.code"
+              :class="{ active: activeHomeSectionCode === section.code }"
+              @click="selectHomeSection(section)"
+            >
+              <strong>{{ section.name }}</strong>
+              <span>{{ section.selected?.length || 0 }}/{{ section.maxItems || 4 }}</span>
+            </button>
+          </aside>
+          <div class="recommendation-picker">
+            <h3>{{ activeHomeSection?.name || '请选择板块' }}</h3>
+            <div class="recommendation-grid">
+              <button
+                v-for="item in activeHomeCandidates"
+                :key="`${item.targetType}-${item.targetId}`"
+                :class="{ selected: isHomeItemSelected(item) }"
+                @click="toggleHomeItem(item)"
+              >
+                <img :src="assetUrl(item.poster)" :alt="item.title" />
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.categoryName }} · {{ item.city || '待排片' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section v-else-if="activeSection === 'cinema'" class="admin-card">
+        <div class="table-head">
+          <div>
+            <h2>电影院管理</h2>
+            <p class="section-note">电影院独立管理，创建时自动生成 4 排 6 座的默认座位图，影厅按 1号厅、2号厅 顺序生成。</p>
+          </div>
+          <el-button type="primary" @click="openCinema()">新增电影院</el-button>
+        </div>
+        <el-table :data="cinemas" border empty-text="暂无电影院">
+          <el-table-column prop="name" label="电影院" min-width="180" />
+          <el-table-column prop="cityName" label="城市" width="100" />
+          <el-table-column prop="address" label="地址" min-width="240" />
+          <el-table-column label="影厅" width="100">
+            <template #default="{ row }">{{ row.halls?.length || 0 }} 个</template>
+          </el-table-column>
+          <el-table-column prop="capacity" label="座位" width="90" />
+          <el-table-column label="操作" width="180" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openCinema(row)">编辑</el-button>
+              <RouterLink class="table-link" :to="`/admin/venue/${row.id}/seats`">座位图</RouterLink>
+              <el-button link type="danger" @click="deleteCinema(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
+
       <section v-else-if="activeSection === 'venue'" class="admin-card">
         <div class="table-head">
           <h2>场馆管理</h2>
@@ -564,16 +628,22 @@
         <el-form-item label="导演"><el-input v-model="movieForm.director" /></el-form-item>
         <el-form-item label="主演"><el-input v-model="movieForm.actors" /></el-form-item>
         <el-form-item label="评分"><el-input v-model="movieForm.rating" /></el-form-item>
-        <el-form-item label="首页推荐"><el-switch v-model="movieForm.homeRecommended" active-text="挂到首页" inactive-text="不挂载" /></el-form-item>
-        <el-form-item label="首页排序"><el-input-number v-model="movieForm.homeSort" :min="0" /></el-form-item>
         <el-form-item label="海报" class="span-2"><el-input v-model="movieForm.poster" placeholder="图片地址" /></el-form-item>
         <el-form-item label="简介" class="span-2"><el-input v-model="movieForm.summary" type="textarea" :rows="3" /></el-form-item>
         <el-form-item label="排片" class="span-2">
           <div class="quick-ticket-editor">
             <div v-for="(session, index) in movieForm.sessions" :key="index" class="quick-ticket-row">
-              <label class="quick-field"><span>城市</span><el-input v-model="session.city" /></label>
-              <label class="quick-field"><span>电影院</span><el-input v-model="session.cinemaName" /></label>
-              <label class="quick-field"><span>影厅</span><el-input v-model="session.hallName" /></label>
+              <label class="quick-field"><span>城市</span><el-input v-model="session.city" @change="syncMovieSessionCinema(index)" /></label>
+              <label class="quick-field"><span>电影院</span>
+                <el-select v-model="session.cinemaId" filterable placeholder="选择电影院" @change="syncMovieSessionCinema(index)">
+                  <el-option v-for="cinema in cinemaOptionsByCity(session.city)" :key="cinema.id" :label="cinema.name" :value="cinema.id" />
+                </el-select>
+              </label>
+              <label class="quick-field"><span>影厅</span>
+                <el-select v-model="session.hallName" placeholder="选择影厅">
+                  <el-option v-for="hall in hallOptions(session)" :key="hall.name" :label="hall.name" :value="hall.name" />
+                </el-select>
+              </label>
               <label class="quick-field"><span>放映时间</span><el-date-picker v-model="session.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
               <label class="quick-field"><span>开售时间</span><el-date-picker v-model="session.saleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
               <label class="quick-field"><span>锁票时间</span><el-date-picker v-model="session.lockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
@@ -588,6 +658,20 @@
       <template #footer>
         <el-button @click="movieDialog = false">取消</el-button>
         <el-button type="primary" @click="saveMovie">保存电影</el-button>
+      </template>
+      </el-dialog>
+
+    <el-dialog v-model="cinemaDialog" :title="cinemaForm.id ? '编辑电影院' : '新增电影院'" width="620px">
+      <el-form label-position="top" class="dialog-form">
+        <el-form-item label="电影院名称"><el-input v-model="cinemaForm.name" /></el-form-item>
+        <el-form-item label="城市"><el-input v-model="cinemaForm.cityName" /></el-form-item>
+        <el-form-item label="地址"><el-input v-model="cinemaForm.address" /></el-form-item>
+        <el-form-item label="影厅数量"><el-input-number v-model="cinemaForm.hallCount" :min="1" :max="30" /></el-form-item>
+        <el-form-item label="简介"><el-input v-model="cinemaForm.description" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cinemaDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveCinema">保存电影院</el-button>
       </template>
     </el-dialog>
 
@@ -774,6 +858,8 @@ const metrics = reactive({ performanceCount: 0, movieCount: 0, orderCount: 0, ti
 const checkerMetrics = reactive({ checkinToday: 0, successRate: '0%', latestResult: '暂无数据' })
 const performances = ref([])
 const movies = ref([])
+const homepageRecommendations = ref([])
+const cinemas = ref([])
 const categories = ref([])
 const venues = ref([])
 const areas = ref([])
@@ -795,6 +881,7 @@ const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowSt
 
 const performanceDialog = ref(false)
 const movieDialog = ref(false)
+const cinemaDialog = ref(false)
 const venueDialog = ref(false)
 const areaDialog = ref(false)
 const sessionDialog = ref(false)
@@ -802,17 +889,21 @@ const ticketLevelDialog = ref(false)
 const batchDialog = ref(false)
 const performanceForm = reactive(emptyPerformance())
 const movieForm = reactive(emptyMovie())
+const cinemaForm = reactive(emptyCinema())
 const venueForm = reactive(emptyVenue())
 const areaForm = reactive(emptyArea())
 const sessionForm = reactive(emptySession())
 const ticketLevelForm = reactive(emptyTicketLevel())
 const batchForm = reactive(emptyBatch())
+const activeHomeSectionCode = ref('hot')
 
 const roleMap = { ADMIN: '系统管理员', MANAGER: '票务管理员', CHECKER: '检票员' }
 const menus = [
   { key: 'overview', title: '运营概览', icon: 'DataAnalysis', path: '/admin', roles: ['ADMIN', 'MANAGER'] },
   { key: 'performance', title: '演出发布', icon: 'Management', path: '/admin/performance', roles: ['ADMIN', 'MANAGER'] },
   { key: 'movie', title: '电影管理', icon: 'VideoCamera', path: '/admin/movie', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'home-recommendation', title: '首页推荐', icon: 'Star', path: '/admin/home-recommendation', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'cinema', title: '电影院管理', icon: 'Film', path: '/admin/cinema', roles: ['ADMIN', 'MANAGER'] },
   { key: 'venue', title: '场馆管理', icon: 'Location', path: '/admin/venue', roles: ['ADMIN', 'MANAGER'] },
   { key: 'seat-template', title: '座位模板', icon: 'Grid', path: '/admin/seat-template', roles: ['ADMIN', 'MANAGER'] },
   { key: 'session', title: '场次管理', icon: 'Calendar', path: '/admin/session', roles: ['ADMIN', 'MANAGER'] },
@@ -869,6 +960,9 @@ const activeMenu = computed(() => menus.find((item) => item.key === activeSectio
 const roleText = computed(() => roleMap[user.role] || user.role)
 const selectedVenue = computed(() => venues.value.find((item) => String(item.id) === String(route.params.id || seatForm.venueId)))
 const selectedPerformanceVenue = computed(() => venues.value.find((item) => String(item.id) === String(performanceForm.venueId)))
+const activeHomeSection = computed(() => homepageRecommendations.value.find((item) => item.code === activeHomeSectionCode.value) || homepageRecommendations.value[0])
+const activeHomeCandidates = computed(() => activeHomeSection.value?.candidates || [])
+const selectedHomeItems = computed(() => activeHomeSection.value?.selected || [])
 const ticketLevelAutoName = computed(() => `${areaName(ticketLevelForm.areaId).replace(/^区域\s*/, '票档')}${Number(ticketLevelForm.price || 0)}`)
 const quickAreaOptions = computed(() => {
   const venueType = selectedPerformanceVenue.value?.venueType
@@ -896,19 +990,23 @@ const sessionLabel = (session) => session ? `${performanceTitle(session.performa
 async function loadAll() {
   if (user.canUseAdminApi) {
     Object.assign(metrics, await adminApi.dashboard())
-    const [categoryRows, performanceRows, movieRows, venueRows, sessionRows, batchRows, poolRows] = await Promise.all([
+    const [categoryRows, performanceRows, movieRows, venueRows, sessionRows, batchRows, poolRows, cinemaRows, recommendationRows] = await Promise.all([
       getCategories(),
       adminApi.performances(),
       adminApi.movies(),
       adminApi.venues(),
       adminApi.sessions(),
       adminApi.saleBatches(),
-      adminApi.stockPool()
+      adminApi.stockPool(),
+      adminApi.cinemas(),
+      adminApi.homepageRecommendations()
     ])
     categories.value = categoryRows
     performances.value = performanceRows
     movies.value = movieRows
     venues.value = venueRows
+    cinemas.value = cinemaRows
+    homepageRecommendations.value = recommendationRows.sections || []
     sessions.value = sessionRows
     saleBatches.value = batchRows
     stockPool.value = poolRows
@@ -1001,6 +1099,10 @@ function emptyPerformance() {
 
 function emptyVenue() {
   return { id: null, name: '', cityName: '上海', address: '', venueType: 'THEATER', stageLabel: '舞台', capacity: 0, description: '', status: 'ENABLED' }
+}
+
+function emptyCinema() {
+  return { id: null, name: '', cityName: '上海', address: '', hallCount: 1, description: '', status: 'ENABLED' }
 }
 
 function emptyArea() {
@@ -1118,13 +1220,14 @@ function emptyMovie() {
 function emptyMovieSession() {
   return {
     city: '上海',
-    cinemaName: '星河影城一号厅',
+    cinemaId: cinemas.value[0]?.id || null,
+    cinemaName: cinemas.value[0]?.name || '',
     hallName: '1号厅',
     startTime: '2026-08-01 19:30:00',
     saleStartTime: '2026-07-01 10:00:00',
-    lockTime: '2026-12-31 23:00:00',
+    lockTime: '2099-12-31 23:00:00',
     price: 68,
-    stock: 96
+    stock: 24
   }
 }
 
@@ -1214,7 +1317,7 @@ function removeQuickTicketLevel(index) {
 function openMovie(row) {
   resetReactive(movieForm, { ...emptyMovie(), ...(row ? clone(row) : {}) })
   movieForm.sessions = movieForm.sessions?.length
-    ? movieForm.sessions.map((session) => ({ ...emptyMovieSession(), ...session, cinemaName: session.cinemaName || venueName(session.venueId) }))
+    ? movieForm.sessions.map((session) => ({ ...emptyMovieSession(), ...session, cinemaId: session.venueId || session.cinemaId, cinemaName: session.cinemaName || venueName(session.venueId) }))
     : [emptyMovieSession()]
   movieDialog.value = true
 }
@@ -1230,6 +1333,15 @@ function removeMovieSession(index) {
 
 async function saveMovie() {
   const payload = clone(movieForm)
+  payload.sessions = payload.sessions.map((session) => {
+    const cinema = cinemas.value.find((item) => String(item.id) === String(session.cinemaId))
+    return {
+      ...session,
+      city: cinema?.cityName || session.city,
+      cinemaName: cinema?.name || session.cinemaName,
+      venueId: session.cinemaId
+    }
+  })
   if (payload.id) await adminApi.updateMovie(payload.id, payload)
   else await adminApi.createMovie(payload)
   ElMessage.success('电影已保存')
@@ -1240,6 +1352,88 @@ async function saveMovie() {
 async function deleteMovie(row) {
   await adminApi.deleteMovie(row.id)
   ElMessage.success('电影已删除')
+  await loadAll()
+}
+
+function selectHomeSection(section) {
+  activeHomeSectionCode.value = section.code
+}
+
+function homeItemKey(item) {
+  return `${item.targetType}-${item.targetId}`
+}
+
+function isHomeItemSelected(item) {
+  return selectedHomeItems.value.some((selected) => homeItemKey(selected) === homeItemKey(item))
+}
+
+function toggleHomeItem(item) {
+  if (!activeHomeSection.value) return
+  const selected = [...selectedHomeItems.value]
+  const index = selected.findIndex((row) => homeItemKey(row) === homeItemKey(item))
+  if (index >= 0) selected.splice(index, 1)
+  else {
+    if (selected.length >= (activeHomeSection.value.maxItems || 4)) {
+      ElMessage.warning('单个板块最多选择 4 个')
+      return
+    }
+    selected.push(item)
+  }
+  activeHomeSection.value.selected = selected
+}
+
+async function saveHomeRecommendation() {
+  if (!activeHomeSection.value) return
+  const result = await adminApi.saveHomepageRecommendation(activeHomeSection.value.code, selectedHomeItems.value)
+  homepageRecommendations.value = result.sections || []
+  ElMessage.success('首页推荐已保存')
+}
+
+function cinemaOptionsByCity(city) {
+  const value = String(city || '').trim()
+  return cinemas.value.filter((item) => !value || item.cityName === value)
+}
+
+function hallOptions(session) {
+  return cinemas.value.find((item) => String(item.id) === String(session.cinemaId))?.halls || []
+}
+
+function syncMovieSessionCinema(index) {
+  const session = movieForm.sessions[index]
+  const options = cinemaOptionsByCity(session.city)
+  if (!options.some((item) => String(item.id) === String(session.cinemaId))) {
+    session.cinemaId = options[0]?.id || null
+  }
+  const cinema = cinemas.value.find((item) => String(item.id) === String(session.cinemaId))
+  session.cinemaName = cinema?.name || ''
+  session.city = cinema?.cityName || session.city
+  const halls = cinema?.halls || []
+  if (!halls.some((hall) => hall.name === session.hallName)) {
+    session.hallName = halls[0]?.name || '1号厅'
+  }
+}
+
+function openCinema(row) {
+  resetReactive(cinemaForm, row ? { ...emptyCinema(), ...clone(row), hallCount: row.halls?.length || row.hallCount || 1 } : emptyCinema())
+  cinemaDialog.value = true
+}
+
+async function saveCinema() {
+  if (cinemaForm.id) await adminApi.updateCinema(cinemaForm.id, cinemaForm)
+  else await adminApi.createCinema(cinemaForm)
+  ElMessage.success('电影院已保存，默认座位图已生成')
+  cinemaDialog.value = false
+  await loadAll()
+}
+
+async function deleteCinema(row) {
+  await ElMessageBox.confirm(`确定删除电影院「${row.name}」吗？`, '删除电影院', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  await adminApi.deleteCinema(row.id)
+  ElMessage.success('电影院已删除')
   await loadAll()
 }
 

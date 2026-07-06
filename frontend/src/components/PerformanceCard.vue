@@ -1,5 +1,5 @@
 <template>
-  <RouterLink class="event-card" :to="`/performances/${item.id}`">
+  <RouterLink class="event-card" :to="item.detailPath || (item.targetType === 'MOVIE' ? `/movies/${item.targetId || item.id}` : `/performances/${item.targetId || item.id}`)">
     <img :src="assetUrl(item.poster)" :alt="item.title" class="event-poster" />
     <div class="event-body">
       <div class="event-status" :class="item.saleStatus">{{ statusText }}</div>

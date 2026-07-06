@@ -1641,7 +1641,176 @@ button {
     min-height: 430px;
   }
 
-  .seat-summary {
+.seat-summary {
     padding: 16px;
   }
+}
+
+.recommendation-admin {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 18px;
+}
+
+.recommendation-sections {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.recommendation-sections button,
+.recommendation-grid button,
+.date-strip button,
+.cinema-list button,
+.movie-poster-strip button,
+.movie-session-row {
+  border: 1px solid #dbe3ef;
+  background: #fff;
+  cursor: pointer;
+}
+
+.recommendation-sections button {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: 8px;
+  color: #111827;
+}
+
+.recommendation-sections button.active,
+.recommendation-grid button.selected,
+.date-strip button.active,
+.cinema-list button.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.recommendation-picker h3,
+.cinema-session-panel h3 {
+  margin: 0 0 14px;
+}
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.recommendation-grid button {
+  text-align: left;
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 0 0 10px;
+}
+
+.recommendation-grid img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  display: block;
+}
+
+.recommendation-grid strong,
+.recommendation-grid span {
+  display: block;
+  padding: 8px 10px 0;
+}
+
+.recommendation-grid span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.movie-flow {
+  display: grid;
+  gap: 18px;
+}
+
+.date-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+}
+
+.date-strip button {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 700;
+}
+
+.cinema-list {
+  display: grid;
+  gap: 12px;
+}
+
+.cinema-list button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.cinema-list p {
+  margin: 6px 0;
+  color: #667085;
+}
+
+.cinema-list span {
+  color: #475467;
+}
+
+.cinema-list em,
+.movie-session-row em {
+  color: #d9303e;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.cinema-session-panel {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 18px;
+}
+
+.movie-poster-strip {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.movie-poster-strip button {
+  width: 118px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.movie-poster-strip img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.movie-poster-strip span {
+  display: block;
+  margin-top: 6px;
+  font-weight: 700;
+}
+
+.session-list {
+  display: grid;
+  gap: 10px;
+}
+
+.movie-session-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 90px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 8px;
+  text-align: left;
 }

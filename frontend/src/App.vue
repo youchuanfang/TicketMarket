@@ -14,7 +14,7 @@
       </nav>
       <RouterLink class="city-switch" to="/city">
         <el-icon><Location /></el-icon>
-        上海
+        {{ currentCity }}
       </RouterLink>
       <div class="global-search">
         <el-input v-model="keyword" placeholder="搜索演出、电影、场馆" clearable @keyup.enter="goSearch">
@@ -48,6 +48,7 @@ const router = useRouter()
 const route = useRoute()
 const user = useUserStore()
 const keyword = ref('')
+const currentCity = ref(localStorage.getItem('ticket-market-city') || '上海')
 
 const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 const displayName = computed(() => user.profile?.nickname || user.profile?.username || '个人中心')
@@ -63,5 +64,10 @@ const logout = async () => {
 
 onMounted(() => {
   user.fetchMe().catch(() => user.clearAuth())
+  const syncCity = () => {
+    currentCity.value = localStorage.getItem('ticket-market-city') || '上海'
+  }
+  window.addEventListener('storage', syncCity)
+  window.addEventListener('ticket-market-city-change', syncCity)
 })
 </script>

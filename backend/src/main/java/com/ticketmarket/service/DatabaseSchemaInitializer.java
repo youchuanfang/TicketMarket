@@ -258,6 +258,31 @@ public class DatabaseSchemaInitializer {
                 ) engine=InnoDB default charset=utf8mb4
                 """);
         statement("""
+                create table if not exists homepage_recommendation (
+                  id bigint primary key auto_increment,
+                  section_code varchar(64) not null,
+                  target_type varchar(32) not null,
+                  target_id bigint not null,
+                  sort_order int not null default 0,
+                  created_at datetime not null default current_timestamp,
+                  updated_at datetime not null default current_timestamp on update current_timestamp,
+                  unique key uk_home_recommendation (section_code, target_type, target_id)
+                ) engine=InnoDB default charset=utf8mb4
+                """);
+        statement("""
+                create table if not exists cinema_hall (
+                  id bigint primary key auto_increment,
+                  venue_id bigint not null,
+                  name varchar(80) not null,
+                  sort_order int not null default 0,
+                  status varchar(32) not null default 'ENABLED',
+                  created_at datetime not null default current_timestamp,
+                  updated_at datetime not null default current_timestamp on update current_timestamp,
+                  deleted tinyint not null default 0,
+                  unique key uk_cinema_hall (venue_id, name)
+                ) engine=InnoDB default charset=utf8mb4
+                """);
+        statement("""
                 create table if not exists reservation_remind (
                   id bigint primary key auto_increment,
                   user_id bigint not null,

@@ -139,16 +139,19 @@ public class Phase4TicketFlowService {
             return failedRush(userId, payload, "FAILED", "请选择场次、票档和数量");
         }
         Map<String, Object> batch = resolveBatch(sessionId, longValue(payload, "batchId", null));
-        try {
-            resourceService.assertFrontSaleOpen(sessionId, (Long) batch.get("id"));
-        } catch (ApiException ex) {
-            if ("SOLD_OUT".equals(resourceService.frontSaleStatus(sessionId).get("status"))) {
-                return failedRush(userId, payload, "SOLD_OUT", "本轮票源已售罄");
+        boolean movieSession = resourceService.isMovieSession(sessionId);
+        if (!movieSession) {
+            try {
+                resourceService.assertFrontSaleOpen(sessionId, (Long) batch.get("id"));
+            } catch (ApiException ex) {
+                if ("SOLD_OUT".equals(resourceService.frontSaleStatus(sessionId).get("status"))) {
+                    return failedRush(userId, payload, "SOLD_OUT", "本轮票源已售罄");
+                }
+                return failedRush(userId, payload, "NOT_STARTED", "当前场次暂未开放购票，可先预约抢票");
             }
-            return failedRush(userId, payload, "NOT_STARTED", "当前场次暂未开放购票，可先预约抢票");
         }
         String batchStatus = String.valueOf(batch.get("status"));
-        if (!"SELLING".equals(batchStatus)) {
+        if (!movieSession && !"SELLING".equals(batchStatus)) {
             return failedRush(userId, payload, "LOCKED", "本轮售票已锁票");
         }
         int purchaseLimit = intValue(batch, "purchaseLimit", 2);
