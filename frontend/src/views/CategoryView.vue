@@ -65,7 +65,7 @@ const load = async () => {
 const goCity = (value) => {
   localStorage.setItem('ticket-market-city', value)
   window.dispatchEvent(new Event('ticket-market-city-change'))
-  router.push({ path: '/search', query: { city: value } })
+  router.push('/')
 }
 
 onMounted(async () => {

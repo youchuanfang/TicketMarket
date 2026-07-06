@@ -87,11 +87,6 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="首页" width="90">
-            <template #default="{ row }">
-              <el-tag :type="row.homeRecommended ? 'success' : 'info'" effect="plain">{{ row.homeRecommended ? '已挂载' : '未挂载' }}</el-tag>
-            </template>
-          </el-table-column>
           <el-table-column label="操作" width="280" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openPerformance(row)">编辑全部细节</el-button>
@@ -117,11 +112,6 @@
           <el-table-column prop="title" label="电影" min-width="180" />
           <el-table-column prop="genre" label="类型" width="140" />
           <el-table-column prop="releaseDate" label="上映" width="120" />
-          <el-table-column label="首页" width="90">
-            <template #default="{ row }">
-              <el-tag :type="row.homeRecommended ? 'success' : 'info'" effect="plain">{{ row.homeRecommended ? '已挂载' : '未挂载' }}</el-tag>
-            </template>
-          </el-table-column>
           <el-table-column label="排片" width="90">
             <template #default="{ row }">{{ row.sessions?.length || 0 }} 场</template>
           </el-table-column>
@@ -206,6 +196,9 @@
         <el-table :data="venues" border empty-text="暂无场馆">
           <el-table-column prop="name" label="场馆" min-width="150" />
           <el-table-column prop="cityName" label="城市" width="100" />
+          <el-table-column label="类型" width="130">
+            <template #default="{ row }">{{ venueTypeText(row.venueType) }}</template>
+          </el-table-column>
           <el-table-column prop="address" label="地址" min-width="220" />
           <el-table-column prop="capacity" label="容量" width="90" />
           <el-table-column label="状态" width="100">
@@ -500,10 +493,6 @@
             show-icon
           />
         </el-form-item>
-        <el-form-item label="首页推荐">
-          <el-switch v-model="performanceForm.homeRecommended" active-text="挂到首页" inactive-text="不挂载" />
-        </el-form-item>
-        <el-form-item label="首页排序"><el-input-number v-model="performanceForm.homeSort" :min="0" /></el-form-item>
         <el-form-item label="购票模式">
           <el-select v-model="performanceForm.saleMode">
             <el-option label="自主选座" value="SELECTABLE" />
@@ -581,37 +570,43 @@
         <el-form-item label="演职人员"><el-input v-model="performanceForm.artistInfo" type="textarea" :rows="4" /></el-form-item>
         <el-form-item label="场馆介绍"><el-input v-model="performanceForm.venueIntro" type="textarea" :rows="3" /></el-form-item>
         <el-form-item label="购票须知"><el-input v-model="performanceForm.purchaseNotice" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="退票规则"><el-input v-model="performanceForm.refundRule" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="退票规则" class="span-2">
+          <div class="refund-editor">
+            <label>
+              <span>免费退票截止</span>
+              <el-date-picker v-model="performanceForm.refundFreeUntil" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择时间" />
+            </label>
+            <label>
+              <span>20%手续费开始</span>
+              <el-date-picker v-model="performanceForm.refundFeeUntil" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择时间" />
+            </label>
+            <label>
+              <span>停止退票时间</span>
+              <el-date-picker v-model="performanceForm.refundStopTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择时间" />
+            </label>
+          </div>
+        </el-form-item>
         <el-form-item label="观演须知"><el-input v-model="performanceForm.entryRule" type="textarea" :rows="3" /></el-form-item>
       </el-form>
       <div class="detail-builder">
         <div class="table-head">
           <h3>详情页排版</h3>
           <div class="head-actions">
-            <el-button @click="addDetailBlock('HEADING')">标题</el-button>
-            <el-button @click="addDetailBlock('PARAGRAPH')">文字</el-button>
-            <el-button @click="addDetailBlock('IMAGE')">图片</el-button>
+            <el-button @click="insertRichHeading">标题</el-button>
+            <el-button @click="insertRichParagraph">文字</el-button>
+            <input ref="richImageInputRef" type="file" accept="image/*" class="hidden-input" @change="insertRichImageFile" />
+            <el-button @click="richImageInputRef?.click()">图片</el-button>
+            <el-input v-model="richImagePath" placeholder="图片地址或本机路径" class="rich-image-path" />
+            <el-button @click="insertRichImagePath">插入图片地址</el-button>
           </div>
         </div>
-        <div v-for="(block, index) in performanceForm.detailBlocks" :key="index" class="detail-block-editor">
-          <el-select v-model="block.type">
-            <el-option label="标题" value="HEADING" />
-            <el-option label="段落" value="PARAGRAPH" />
-            <el-option label="图片" value="IMAGE" />
-          </el-select>
-          <template v-if="block.type === 'IMAGE'">
-            <img v-if="assetUrl(block.content)" :src="assetUrl(block.content)" alt="详情图预览" class="detail-preview" />
-            <input type="file" accept="image/*" @change="setBlockImage(index, $event)" />
-            <el-input v-model="block.content" placeholder="图片地址或上传图片" />
-            <el-button @click="importBlockImage(index)">导入本机路径</el-button>
-          </template>
-          <el-input v-else v-model="block.content" type="textarea" :rows="block.type === 'HEADING' ? 1 : 3" />
-          <div class="block-actions">
-            <el-button :disabled="index === 0" @click="moveBlock(index, -1)">上移</el-button>
-            <el-button :disabled="index === performanceForm.detailBlocks.length - 1" @click="moveBlock(index, 1)">下移</el-button>
-            <el-button type="danger" @click="removeBlock(index)">删除</el-button>
-          </div>
-        </div>
+        <div
+          ref="detailEditorRef"
+          class="rich-editor"
+          contenteditable="true"
+          @input="syncRichEditor"
+          @blur="syncRichEditor"
+        />
       </div>
       <template #footer>
         <el-button @click="performanceDialog = false">取消</el-button>
@@ -645,10 +640,7 @@
                 </el-select>
               </label>
               <label class="quick-field"><span>放映时间</span><el-date-picker v-model="session.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
-              <label class="quick-field"><span>开售时间</span><el-date-picker v-model="session.saleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
-              <label class="quick-field"><span>锁票时间</span><el-date-picker v-model="session.lockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
               <label class="quick-field small"><span>票价</span><el-input-number v-model="session.price" :min="0" /></label>
-              <label class="quick-field small"><span>库存</span><el-input-number v-model="session.stock" :min="0" /></label>
               <el-button type="danger" @click="removeMovieSession(index)">删除</el-button>
             </div>
             <el-button @click="addMovieSession">新增排片</el-button>
@@ -684,7 +676,6 @@
           <el-select v-model="venueForm.venueType">
             <el-option label="剧场 / 演出厅" value="THEATER" />
             <el-option label="体育场馆 / 演唱会" value="STADIUM" />
-            <el-option label="影院 / 银幕厅" value="CINEMA" />
           </el-select>
         </el-form-item>
         <el-form-item label="舞台/银幕标签"><el-input v-model="venueForm.stageLabel" placeholder="舞台、主舞台、银幕" /></el-form-item>
@@ -792,7 +783,7 @@
 </template>
 
 <script setup>
-import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { http } from '../api/http'
@@ -878,6 +869,9 @@ const ticketCode = ref('')
 const selectedSessionId = ref(null)
 const seatFormAreas = ref([])
 const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowStart: 1, rowEnd: 3, seatsPerRow: 12, startX: 60, startY: 80, gapX: 30, gapY: 30, aisleAfterSeats: '6' })
+const detailEditorRef = ref(null)
+const richImageInputRef = ref(null)
+const richImagePath = ref('')
 
 const performanceDialog = ref(false)
 const movieDialog = ref(false)
@@ -940,6 +934,7 @@ const statusMap = {
 const purchaseModeMap = { SELECTABLE: '自主选座', AUTO_ALLOCATE: '系统配座', AREA_ONLY: '只选区域', STANDING: '站席' }
 const releaseTypeMap = { FULL: '全部开放', PARTIAL: '分批开放', MANUAL: '手动开放', QUANTITY: '按数量', RATIO: '按比例' }
 const areaTypeMap = { SEATED: '看台/有座', STANDING: '内场/站席' }
+const venueTypeMap = { THEATER: '剧院/剧场', STADIUM: '体育场馆' }
 const sourceTypeMap = { POST_LOCK_RETURNED: '锁票回收', POST_LOCK_RETURN: '锁票回收', REFUND_WAITING_RELEASE: '退票待释放', REFUND_RETURN: '退票回流', UNRELEASED: '未开放库存', MANUAL_ADD: '人工调整' }
 
 const textFromMap = (map, value) => map[value] || value || '暂无数据'
@@ -947,6 +942,7 @@ const statusText = (value) => textFromMap(statusMap, value)
 const purchaseModeText = (value) => textFromMap(purchaseModeMap, value)
 const releaseTypeText = (value) => textFromMap(releaseTypeMap, value)
 const areaTypeText = (value) => textFromMap(areaTypeMap, value)
+const venueTypeText = (value) => textFromMap(venueTypeMap, value)
 const sourceTypeText = (value) => textFromMap(sourceTypeMap, value)
 const refundStatusText = (value) => textFromMap({ APPLYING: '待审核', APPROVED: '已通过', REJECTED: '已驳回' }, value)
 
@@ -1004,7 +1000,7 @@ async function loadAll() {
     categories.value = categoryRows
     performances.value = performanceRows
     movies.value = movieRows
-    venues.value = venueRows
+    venues.value = venueRows.filter((item) => item.venueType !== 'CINEMA')
     cinemas.value = cinemaRows
     homepageRecommendations.value = recommendationRows.sections || []
     sessions.value = sessionRows
@@ -1089,7 +1085,11 @@ function emptyPerformance() {
     venueIntro: '',
     purchaseNotice: '',
     refundRule: '',
+    refundFreeUntil: '2026-07-10 19:00:00',
+    refundFeeUntil: '2026-07-10 19:00:00',
+    refundStopTime: '2026-08-18 18:30:00',
     entryRule: '',
+    detailContent: '<h2>项目介绍</h2><p>请在这里编辑详情页内容，可以插入多段文字和多张图片。</p>',
     detailBlocks: [
       { type: 'HEADING', content: '项目介绍' },
       { type: 'PARAGRAPH', content: '' }
@@ -1139,7 +1139,8 @@ function resetReactive(target, source) {
 }
 
 async function openPerformance(row) {
-  const next = row ? clone(row) : emptyPerformance()
+  const fullRow = row?.id ? await adminApi.performance(row.id) : null
+  const next = fullRow ? clone(fullRow) : (row ? clone(row) : emptyPerformance())
   next.tagsText = (next.tags || []).join(',') || next.tagsText || ''
   if (row?.id) {
     const existingSessions = performanceSessions(row.id)
@@ -1179,6 +1180,7 @@ async function openPerformance(row) {
   }
   resetReactive(performanceForm, { ...emptyPerformance(), ...next })
   performanceDialog.value = true
+  renderRichEditor()
 }
 
 function syncCategoryName() {
@@ -1224,10 +1226,7 @@ function emptyMovieSession() {
     cinemaName: cinemas.value[0]?.name || '',
     hallName: '1号厅',
     startTime: '2026-08-01 19:30:00',
-    saleStartTime: '2026-07-01 10:00:00',
-    lockTime: '2099-12-31 23:00:00',
-    price: 68,
-    stock: 24
+    price: 68
   }
 }
 
@@ -1306,6 +1305,64 @@ function removeBlock(index) {
   performanceForm.detailBlocks.splice(index, 1)
 }
 
+function syncRichEditor() {
+  if (!detailEditorRef.value) return
+  performanceForm.detailContent = detailEditorRef.value.innerHTML
+}
+
+function renderRichEditor() {
+  nextTick(() => {
+    if (!detailEditorRef.value) return
+    detailEditorRef.value.innerHTML = rewriteRichImageSources(performanceForm.detailContent || '')
+  })
+}
+
+function rewriteRichImageSources(html) {
+  return String(html || '').replace(/src="([^"]+)"/g, (_, src) => `src="${assetUrl(src)}"`)
+}
+
+function insertRichHtml(html) {
+  if (!detailEditorRef.value) return
+  detailEditorRef.value.focus()
+  document.execCommand('insertHTML', false, html)
+  syncRichEditor()
+}
+
+function insertRichHeading() {
+  insertRichHtml('<h2>新的小标题</h2>')
+}
+
+function insertRichParagraph() {
+  insertRichHtml('<p>在这里输入正文内容。</p>')
+}
+
+async function insertRichImagePath() {
+  let path = richImagePath.value.trim()
+  if (!path) {
+    ElMessage.warning('请先填写图片地址或本机路径')
+    return
+  }
+  if (looksLikeLocalImagePath(path)) {
+    const result = await adminApi.uploadLocalImage(path)
+    path = result.path
+  }
+  insertRichHtml(`<p><img src="${path}" alt="详情图片"></p>`)
+  richImagePath.value = ''
+  if (!performanceForm.detailImage) performanceForm.detailImage = path
+}
+
+async function insertRichImageFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  try {
+    const result = await adminApi.uploadImage(file)
+    insertRichHtml(`<p><img src="${result.path}" alt="详情图片"></p>`)
+    if (!performanceForm.detailImage) performanceForm.detailImage = result.path
+  } finally {
+    event.target.value = ''
+  }
+}
+
 function addQuickTicketLevel() {
   performanceForm.quickTicketLevels.push({ areaType: quickAreaOptions.value[0]?.value || 'SEATED', price: 380, stock: 100 })
 }
@@ -1317,7 +1374,7 @@ function removeQuickTicketLevel(index) {
 function openMovie(row) {
   resetReactive(movieForm, { ...emptyMovie(), ...(row ? clone(row) : {}) })
   movieForm.sessions = movieForm.sessions?.length
-    ? movieForm.sessions.map((session) => ({ ...emptyMovieSession(), ...session, cinemaId: session.venueId || session.cinemaId, cinemaName: session.cinemaName || venueName(session.venueId) }))
+    ? movieForm.sessions.map((session) => ({ ...emptyMovieSession(), ...session, cinemaId: session.venueId || session.cinemaId, cinemaName: session.cinemaName || cinemaName(session.venueId) }))
     : [emptyMovieSession()]
   movieDialog.value = true
 }
@@ -1339,7 +1396,10 @@ async function saveMovie() {
       ...session,
       city: cinema?.cityName || session.city,
       cinemaName: cinema?.name || session.cinemaName,
-      venueId: session.cinemaId
+      venueId: session.cinemaId,
+      saleStartTime: '',
+      lockTime: '',
+      stock: undefined
     }
   })
   if (payload.id) await adminApi.updateMovie(payload.id, payload)
@@ -1392,6 +1452,10 @@ async function saveHomeRecommendation() {
 function cinemaOptionsByCity(city) {
   const value = String(city || '').trim()
   return cinemas.value.filter((item) => !value || item.cityName === value)
+}
+
+function cinemaName(id) {
+  return cinemas.value.find((item) => String(item.id) === String(id))?.name || `电影院 ${id || ''}`
 }
 
 function hallOptions(session) {
@@ -1500,7 +1564,7 @@ async function createQuickSessionsAndTickets(performance) {
     ...String(performanceForm.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime)
   ].filter(Boolean)
   const dateRows = [...new Set(rawDates)]
-  const levels = performanceForm.quickTicketLevels.filter((level) => Number(level.price || 0) > 0 && Number(level.totalStock || 0) > 0)
+  const levels = performanceForm.quickTicketLevels.filter((level) => Number(level.price || 0) > 0 && Number(level.stock || level.totalStock || 0) > 0)
   if (!performanceForm.venueId || !dateRows.length || !levels.length) return
   const areasByName = new Map()
   for (let i = 0; i < levels.length; i++) {
@@ -1566,7 +1630,7 @@ async function syncFirstSaleBatch(session, levels) {
     lockTime: normalizeDateTime(performanceForm.quickLockTime) || addHours(session.startTime, -1),
     releaseType: 'QUANTITY',
     releaseQuantity: 0,
-    purchaseLimit: existingBatch?.purchaseLimit || 6,
+    purchaseLimit: 4,
     enableQueue: true,
     allowReturnDuringSale: true,
     status: existingBatch?.status || 'NOT_STARTED'
@@ -1576,6 +1640,7 @@ async function syncFirstSaleBatch(session, levels) {
 }
 
 async function savePerformance() {
+  syncRichEditor()
   syncCategoryName()
   await importPerformancePosterIfLocal()
   const prices = performanceForm.quickTicketLevels.map((item) => Number(item.price || 0)).filter((value) => value > 0)
@@ -1586,7 +1651,7 @@ async function savePerformance() {
   const payload = {
     ...clone(performanceForm),
     tags: performanceForm.tagsText.split(',').map((item) => item.trim()).filter(Boolean),
-    detailImage: performanceForm.detailBlocks.find((item) => item.type === 'IMAGE' && item.content)?.content || performanceForm.detailImage
+    detailImage: performanceForm.detailImage
   }
   if (payload.id) await adminApi.updatePerformance(payload.id, payload)
   else await adminApi.createPerformance(payload)

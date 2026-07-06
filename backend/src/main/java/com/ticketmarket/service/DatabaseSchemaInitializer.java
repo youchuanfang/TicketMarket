@@ -38,6 +38,9 @@ public class DatabaseSchemaInitializer {
                   venue_intro text,
                   purchase_notice text,
                   refund_notice text,
+                  refund_free_until datetime,
+                  refund_fee_until datetime,
+                  refund_stop_time datetime,
                   entry_notice text,
                   service_tags varchar(500),
                   purchase_mode varchar(32) default 'SELECTABLE',
@@ -313,6 +316,9 @@ public class DatabaseSchemaInitializer {
         addColumn("performance", "artist_intro", "text");
         addColumn("performance", "venue_intro", "text");
         addColumn("performance", "refund_notice", "text");
+        addColumn("performance", "refund_free_until", "datetime");
+        addColumn("performance", "refund_fee_until", "datetime");
+        addColumn("performance", "refund_stop_time", "datetime");
         addColumn("performance", "entry_notice", "text");
         addColumn("performance", "service_tags", "varchar(500)");
         addColumn("performance", "purchase_mode", "varchar(32) default 'SELECTABLE'");

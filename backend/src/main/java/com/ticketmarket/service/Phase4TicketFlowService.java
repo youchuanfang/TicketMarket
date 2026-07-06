@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -154,22 +155,26 @@ public class Phase4TicketFlowService {
         if (!movieSession && !"SELLING".equals(batchStatus)) {
             return failedRush(userId, payload, "LOCKED", "本轮售票已锁票");
         }
-        int purchaseLimit = intValue(batch, "purchaseLimit", 2);
+        int purchaseLimit = Math.min(4, intValue(batch, "purchaseLimit", 4));
         if (quantity > purchaseLimit) {
-            return failedRush(userId, payload, "LIMITED", "已超出限购规则");
+            return failedRush(userId, payload, "LIMITED", "单次最多购买 4 张");
         }
         Map<String, Object> level = resourceService.ticketLevel(ticketLevelId);
         if (!Objects.equals(level.get("sessionId"), sessionId)) {
             return failedRush(userId, payload, "FAILED", "票档与场次不匹配，请重新选择");
         }
         List<Long> viewerIds = longList(payload.get("viewerIds"));
-        if (viewerIds.size() != quantity) {
-            return failedRush(userId, payload, "FAILED", "请选择对应数量的观演人");
-        }
-        List<Viewer> viewers = demoDataService.listViewers(userId);
-        boolean invalidViewer = viewerIds.stream().anyMatch(id -> viewers.stream().noneMatch(viewer -> Objects.equals(viewer.getId(), id)));
-        if (invalidViewer) {
-            return failedRush(userId, payload, "FAILED", "观演人信息不可用，请重新选择");
+        if (!movieSession) {
+            if (viewerIds.size() != quantity) {
+                return failedRush(userId, payload, "FAILED", "请为每张票选择一位观演人");
+            }
+            List<Viewer> viewers = demoDataService.listViewers(userId);
+            boolean invalidViewer = viewerIds.stream().anyMatch(id -> viewers.stream().noneMatch(viewer -> Objects.equals(viewer.getId(), id)));
+            if (invalidViewer) {
+                return failedRush(userId, payload, "FAILED", "观演人信息不可用，请重新选择");
+            }
+        } else {
+            viewerIds = List.of();
         }
         if (hasDuplicateSuccess(userId, sessionId)) {
             return failedRush(userId, payload, "DUPLICATE", "检测到重复提交，请查看当前订单");
@@ -255,6 +260,9 @@ public class Phase4TicketFlowService {
         Integer quantity = intValue(payload, "quantity", 1);
         if (sessionId == null || ticketLevelId == null || quantity == null || quantity < 1) {
             throw new ApiException(400, "请选择场次、票档和数量");
+        }
+        if (quantity > 4) {
+            throw new ApiException(400, "单次最多预约 4 张");
         }
         Map<String, Object> level = resourceService.ticketLevel(ticketLevelId);
         if (!Objects.equals(level.get("sessionId"), sessionId)) {
@@ -478,12 +486,13 @@ public class Phase4TicketFlowService {
         if (checkedIn) {
             throw new ApiException(409, "已核验电子票不能退票");
         }
+        String feeRate = refundFeeRate(order);
         Map<String, Object> refund = map(
                 "id", refundId.incrementAndGet(),
                 "orderId", orderIdValue,
                 "userId", userId,
                 "amount", order.get("totalAmount"),
-                "feeRate", "0%",
+                "feeRate", feeRate,
                 "status", "APPLYING",
                 "message", "退票申请已提交，等待审核",
                 "createdAt", now(),
@@ -497,6 +506,32 @@ public class Phase4TicketFlowService {
         addMessage(userId, "退票申请已提交", "订单 " + order.get("orderNo") + " 已提交退票申请，请等待审核。");
         log("退票", "用户提交退票申请，订单号：" + order.get("orderNo"), userId);
         return copy(refund);
+    }
+
+    private String refundFeeRate(Map<String, Object> order) {
+        Long sessionId = longValue(order, "sessionId", null);
+        if (sessionId == null) return "0%";
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                select ps.performance_id performanceId, ps.movie_id movieId, ps.start_time startTime,
+                       p.refund_fee_until refundFeeUntil, p.refund_stop_time refundStopTime
+                from performance_session ps
+                left join performance p on p.id=ps.performance_id
+                where ps.id=?
+                """, sessionId);
+        LocalDateTime nowTime = LocalDateTime.now();
+        Timestamp start = (Timestamp) row.get("startTime");
+        if (row.get("movieId") != null) {
+            if (start != null && !nowTime.isBefore(start.toLocalDateTime())) {
+                throw new ApiException(409, "电影已开始放映，不能申请退票");
+            }
+            return "0%";
+        }
+        Timestamp stop = (Timestamp) row.get("refundStopTime");
+        if (stop != null && !nowTime.isBefore(stop.toLocalDateTime())) {
+            throw new ApiException(409, "已超过退票截止时间");
+        }
+        Timestamp feeStart = (Timestamp) row.get("refundFeeUntil");
+        return feeStart != null && !nowTime.isBefore(feeStart.toLocalDateTime()) ? "20%" : "0%";
     }
 
     public List<Map<String, Object>> userRefunds(Long userId) {
@@ -1013,7 +1048,8 @@ public class Phase4TicketFlowService {
         }
         List<Long> viewerIds = longList(order.get("viewerIds"));
         List<Long> seatIds = longList(order.get("selectedSeatIds"));
-        for (int i = 0; i < viewerIds.size(); i++) {
+        int quantity = intValue(order, "quantity", viewerIds.size());
+        for (int i = 0; i < quantity; i++) {
             Long id = ticketId.incrementAndGet();
             String ticketNo = "ET" + UUID.randomUUID().toString().replace("-", "").substring(0, 14).toUpperCase();
             Map<String, Object> ticket = map(
@@ -1022,7 +1058,7 @@ public class Phase4TicketFlowService {
                     "qrCodeContent", "TICKETMARKET:" + ticketNo,
                     "orderId", orderIdValue,
                     "userId", order.get("userId"),
-                    "viewerId", viewerIds.get(i),
+                    "viewerId", i < viewerIds.size() ? viewerIds.get(i) : null,
                     "sessionId", order.get("sessionId"),
                     "ticketLevelId", order.get("ticketLevelId"),
                     "seatId", i < seatIds.size() ? seatIds.get(i) : null,

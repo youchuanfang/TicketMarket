@@ -1,9 +1,9 @@
 <template>
   <div class="page narrow">
-    <SectionHeader title="图形化选座" eyebrow="在线选座" />
+    <SectionHeader title="选座" />
     <section class="seat-purchase-layout">
       <div class="seat-purchase-main">
-        <div class="stage-line">舞台 / 银幕</div>
+        <div class="stage-line">{{ route.query.movie ? '银幕' : '舞台' }}</div>
         <svg viewBox="0 0 760 560" class="seat-map">
           <circle
             v-for="seat in seats"
@@ -29,7 +29,7 @@
           <span>{{ seat.seatLabel }}</span>
           <strong>¥{{ levelPrice(seat.ticketLevelId) }}</strong>
         </div>
-        <el-select v-model="viewerIds" multiple placeholder="选择观演人">
+        <el-select v-if="!isMovie" v-model="viewerIds" multiple placeholder="选择观演人">
           <el-option v-for="viewer in viewers" :key="viewer.id" :label="`${viewer.name} ${viewer.idCardMasked}`" :value="viewer.id" />
         </el-select>
         <div class="seat-total">
@@ -63,22 +63,20 @@ const viewerIds = ref([])
 const batch = ref(null)
 const selectedIds = ref([])
 const submitting = ref(false)
+const isMovie = computed(() => Boolean(route.query.movie))
 
 const legends = [
   { status: 'AVAILABLE', label: '可售', color: '#2f9e44' },
-  { status: 'LOCKED', label: '锁定', color: '#f59f00' },
-  { status: 'SOLD', label: '已售', color: '#868e96' },
-  { status: 'DISABLED', label: '不可售', color: '#ced4da' },
-  { status: 'UNRELEASED', label: '未开放', color: '#adb5bd' },
-  { status: 'POST_LOCK_RETURNED', label: '锁票后回收', color: '#7048e8' }
+  { status: 'SELECTED', label: '选择', color: '#f59f00' },
+  { status: 'SOLD', label: '已售', color: '#d9303e' }
 ]
 
 const colorMap = Object.fromEntries(legends.map((item) => [item.status, item.color]))
 const selectedSeats = computed(() => seats.value.filter((seat) => selectedIds.value.includes(seat.id)))
 const totalPrice = computed(() => selectedSeats.value.reduce((sum, seat) => sum + Number(levelPrice(seat.ticketLevelId)), 0))
 
-const seatColor = (seat) => selectedIds.value.includes(seat.id) ? '#d9303e' : (colorMap[seat.status] || '#2f9e44')
-const statusText = (status) => legends.find((item) => item.status === status)?.label || status
+const seatColor = (seat) => selectedIds.value.includes(seat.id) ? colorMap.SELECTED : (seat.status === 'AVAILABLE' ? colorMap.AVAILABLE : colorMap.SOLD)
+const statusText = (status) => status === 'AVAILABLE' ? '可售' : '已售'
 const levelPrice = (levelId) => ticketLevels.value.find((level) => level.id === levelId)?.price || 0
 
 const toggleSeat = (seat) => {
@@ -89,12 +87,20 @@ const toggleSeat = (seat) => {
   if (selectedIds.value.includes(seat.id)) {
     selectedIds.value = selectedIds.value.filter((id) => id !== seat.id)
   } else {
+    if (selectedIds.value.length >= 4) {
+      ElMessage.warning('一次最多选择 4 个座位')
+      return
+    }
     selectedIds.value = [...selectedIds.value, seat.id]
   }
 }
 
 const submit = async () => {
-  if (viewerIds.value.length !== selectedSeats.value.length) {
+  if (selectedSeats.value.length > 4) {
+    ElMessage.warning('一次最多购买 4 张')
+    return
+  }
+  if (!isMovie.value && viewerIds.value.length !== selectedSeats.value.length) {
     ElMessage.warning('请选择对应数量的观演人')
     return
   }
@@ -111,7 +117,7 @@ const submit = async () => {
       batchId: batch.value?.id,
       ticketLevelId: firstSeat.ticketLevelId,
       quantity: selectedSeats.value.length,
-      viewerIds: viewerIds.value,
+      viewerIds: isMovie.value ? [] : viewerIds.value,
       selectedSeatIds: selectedIds.value
     })
     if (route.query.movie) router.push(`/payment/${request.orderId}`)
@@ -125,8 +131,10 @@ onMounted(async () => {
   try {
     seats.value = await getSessionSeats(route.params.id)
     ticketLevels.value = await getSessionTicketLevels(route.params.id)
-    viewers.value = await getViewers()
-    viewerIds.value = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id)
+    if (!isMovie.value) {
+      viewers.value = await getViewers()
+      viewerIds.value = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id).slice(0, 4)
+    }
     batch.value = await getActiveBatch(route.params.id)
   } catch (error) {
     ElMessage.warning(error.message || '当前场次暂未开放选座，可先预约抢票')

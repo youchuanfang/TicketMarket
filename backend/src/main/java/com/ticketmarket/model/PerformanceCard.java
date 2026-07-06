@@ -24,10 +24,14 @@ public class PerformanceCard {
     private List<String> tags;
     private String summary;
     private String intro;
+    private String detailContent;
     private String artistInfo;
     private String venueIntro;
     private String purchaseNotice;
     private String refundRule;
+    private String refundFreeUntil;
+    private String refundFeeUntil;
+    private String refundStopTime;
     private String entryRule;
     private String publishStatus;
     private Boolean homeRecommended;
@@ -199,6 +203,14 @@ public class PerformanceCard {
         this.intro = intro;
     }
 
+    public String getDetailContent() {
+        return detailContent;
+    }
+
+    public void setDetailContent(String detailContent) {
+        this.detailContent = detailContent;
+    }
+
     public String getArtistInfo() {
         return artistInfo;
     }
@@ -229,6 +241,30 @@ public class PerformanceCard {
 
     public void setRefundRule(String refundRule) {
         this.refundRule = refundRule;
+    }
+
+    public String getRefundFreeUntil() {
+        return refundFreeUntil;
+    }
+
+    public void setRefundFreeUntil(String refundFreeUntil) {
+        this.refundFreeUntil = refundFreeUntil;
+    }
+
+    public String getRefundFeeUntil() {
+        return refundFeeUntil;
+    }
+
+    public void setRefundFeeUntil(String refundFeeUntil) {
+        this.refundFeeUntil = refundFeeUntil;
+    }
+
+    public String getRefundStopTime() {
+        return refundStopTime;
+    }
+
+    public void setRefundStopTime(String refundStopTime) {
+        this.refundStopTime = refundStopTime;
     }
 
     public String getEntryRule() {

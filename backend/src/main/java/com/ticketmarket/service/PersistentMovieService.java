@@ -57,7 +57,7 @@ public class PersistentMovieService {
             payload.put("homeRecommended", movie.getId() <= 203);
             payload.put("homeSort", movie.getId() - 200);
             payload.put("sessions", movie.getSessions().stream().map(session -> Map.of(
-                    "cinemaName", "星河影城一号厅",
+                    "cinemaName", "星河影城",
                     "hallName", session.hallName(),
                     "city", "上海",
                     "startTime", session.startTime(),
@@ -384,8 +384,10 @@ public class PersistentMovieService {
     private Long ensureMovieSession(Long movieId, Long venueId, Map<String, Object> payload) {
         Timestamp start = timeValue(payload, "startTime", "2026-08-01 19:30:00");
         List<Long> ids = jdbcTemplate.queryForList("select id from performance_session where movie_id=? and start_time=? and deleted=0 order by id limit 1", Long.class, movieId, start);
-        Timestamp saleStart = timeValue(payload, "saleStartTime", "2026-07-01 10:00:00");
-        Timestamp lockTime = timeValue(payload, "lockTime", "2099-12-31 23:00:00");
+        Timestamp saleStart = optionalTimeValue(payload, "saleStartTime");
+        if (saleStart == null) saleStart = Timestamp.valueOf(LocalDateTime.now().minusMinutes(1));
+        Timestamp lockTime = optionalTimeValue(payload, "lockTime");
+        if (lockTime == null) lockTime = Timestamp.valueOf(LocalDateTime.of(2099, 12, 31, 23, 59, 59));
         if (!ids.isEmpty()) {
             jdbcTemplate.update("""
                     update performance_session set venue_id=?, session_name=?, hall_name=?, sale_start_time=?, lock_time=?,
@@ -431,7 +433,7 @@ public class PersistentMovieService {
                 insert into sale_batch
                 (session_id, name, batch_name, sale_start_time, lock_time, open_mode, release_type, open_stock, release_quantity,
                  release_ratio, allow_return_current_round, allow_return_during_sale, limit_per_user, purchase_limit, queue_enabled, enable_queue, status, created_at, updated_at, deleted)
-                values (?, '电影开售', '电影开售', ?, ?, 'QUANTITY', 'QUANTITY', 0, 0, 0, 1, 1, 6, 6, 1, 1, 'NOT_STARTED', now(), now(), 0)
+                values (?, '电影开售', '电影开售', ?, ?, 'QUANTITY', 'QUANTITY', 0, 0, 0, 1, 1, 4, 4, 1, 1, 'NOT_STARTED', now(), now(), 0)
                 """, sessionId, saleStart, lockTime);
     }
 
@@ -536,6 +538,14 @@ public class PersistentMovieService {
 
     private Timestamp timeValue(Map<String, Object> payload, String key, String fallback) {
         String value = str(payload, key, fallback);
+        if (value.matches("\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}$")) value += ":00";
+        return Timestamp.valueOf(LocalDateTime.parse(value, FORMATTER));
+    }
+
+    private Timestamp optionalTimeValue(Map<String, Object> payload, String key) {
+        Object raw = payload.get(key);
+        if (raw == null || String.valueOf(raw).isBlank()) return null;
+        String value = String.valueOf(raw).trim();
         if (value.matches("\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}$")) value += ":00";
         return Timestamp.valueOf(LocalDateTime.parse(value, FORMATTER));
     }

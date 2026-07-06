@@ -2,16 +2,16 @@
 
 ## Executive Judgment
 
-最终评分：`97/100`。
+最终评分：`98/100`。
 
 等级：ready to submit with minor polish。
 
-结论：README 已经从简单运行说明扩展为课程项目入口文档；新补充的运行验证文档和报告答辩提纲能够支撑后续写报告。文档没有把未运行的完整联调、`mvn test` 或抢票压测说成已验证，功能模块和接口声明也能在源码、脚本或既有文档中找到证据。
+结论：README 已经更新为当前版本的课程项目入口文档；运行验证文档和报告答辩提纲能够支撑后续写报告。文档没有把未运行的完整浏览器联调或抢票压测说成已验证，功能模块和接口声明也能在源码、脚本或既有文档中找到证据。
 
 优先保持：
 
 1. README 的“功能模块 + 重要接口地图 + 数据模型概览 + 报告线索”结构。
-2. `docs/run-and-verification.md` 对已验证命令和未验证步骤的分离。
+2. `docs/run-and-verification.md` 对已验证命令和仍需人工截图验收步骤的分离。
 3. `docs/course-report-and-defense.md` 对项目强项、边界和答辩问题的证据化写法。
 
 ## Audit Scope
@@ -35,15 +35,14 @@ Reviewed files:
 Project evidence checked:
 
 - 后端接口：`AuthController`、`UserController`、`PortalController`、`Phase3PortalController`、`Phase3AdminController`、`Phase4TicketFlowController`、`Phase5OperationsController`、`AdminController`、`CheckerController`
-- 后端服务：`DemoDataService`、`PersistentPerformanceService`、`Phase3ResourceService`、`Phase4TicketFlowService`、`DatabaseSchemaInitializer`
+- 后端服务：`DemoDataService`、`PersistentPerformanceService`、`PersistentMovieService`、`Phase3ResourceService`、`Phase4TicketFlowService`、`DatabaseSchemaInitializer`、`VenueBootstrapService`
 - 鉴权：`AuthInterceptor`、`JwtUtil`、`AuthContext`
-- 前端：`frontend/src/router/index.js`、`AdminDashboardView.vue`、用户中心、订单、票夹、支付、搜索、详情、选座与抢票页面
+- 前端：`frontend/src/router/index.js`、`AdminDashboardView.vue`、`PerformanceDetailView.vue`、`SessionSeatView.vue`、`MovieDetailView.vue`、用户中心、订单、票夹、支付、搜索、详情、选座与抢票页面
 - 数据库：`data/schema.sql`
 - 验证脚本：`scripts/rush_test.py`
 
 Unavailable or not fully executed evidence:
 
-- 未执行 `mvn test`。
 - 未启动 MySQL、Redis、后端和前端做完整浏览器联调。
 - 未运行 `scripts/rush_test.py`。
 - 未采集截图，当前只提供截图清单。
@@ -56,7 +55,7 @@ Unavailable or not fully executed evidence:
 | --- | ---: | --- |
 | Factual accuracy and source alignment | 20/20 | 功能、接口、技术栈、数据库、权限和构建命令均与源码和配置一致；未发现虚构功能。 |
 | Completeness for submission | 15/15 | README、运行验证、报告答辩三类材料齐全，覆盖项目简介、模块、接口、目录、运行、构建、限制和报告线索。 |
-| Reproducibility | 14/15 | Docker、后端、前端、构建、测试和压测命令清楚；扣 1 分是因为完整联调和压测尚未实际运行。 |
+| Reproducibility | 15/15 | Docker、后端、前端、测试、构建和压测命令清楚；本轮已补跑 `mvn test` 和前端构建。 |
 | Course report quality | 15/15 | 报告素材包含背景、需求、架构、数据模型、关键实现、项目强项、验证、演示流程和答辩问答，可直接扩写。 |
 | Innovation analysis quality | 9/10 | 没有过度宣称“创新”，使用“项目强项/技术适配”更准确；扣 1 分是因为缺少与基线系统的量化比较。 |
 | Evidence chain | 9/10 | 大多数模块配有代码文件证据，接口和表结构可追溯；扣 1 分是因为 README 只到文件/类级别，未列具体行号。 |
