@@ -1213,6 +1213,21 @@ button {
   background: #eef2f7;
 }
 
+.thumb-placeholder {
+  display: inline-flex;
+  width: 52px;
+  height: 70px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .admin-editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1221,6 +1236,53 @@ button {
 
 .admin-editor-grid .span-2 {
   grid-column: span 2;
+}
+
+.section-note,
+.form-tip {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.session-date-editor,
+.quick-ticket-editor {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.session-date-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.quick-ticket-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(130px, 0.8fr) repeat(3, minmax(120px, 0.7fr)) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.quick-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.quick-field .el-input-number,
+.quick-field .el-select,
+.quick-field .el-input {
+  width: 100%;
 }
 
 .dialog-form {
@@ -1409,6 +1471,8 @@ button {
   }
 
   .resource-form,
+  .session-date-row,
+  .quick-ticket-row,
   .seat-purchase-layout {
     grid-template-columns: 1fr;
   }

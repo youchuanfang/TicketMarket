@@ -6,6 +6,7 @@ import com.ticketmarket.model.MovieCard;
 import com.ticketmarket.model.PerformanceCard;
 import com.ticketmarket.service.DemoDataService;
 import com.ticketmarket.service.PersistentPerformanceService;
+import com.ticketmarket.service.Phase3ResourceService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,10 +24,12 @@ import java.util.Objects;
 public class PortalController {
     private final DemoDataService dataService;
     private final PersistentPerformanceService performanceService;
+    private final Phase3ResourceService resourceService;
 
-    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService) {
+    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService, Phase3ResourceService resourceService) {
         this.dataService = dataService;
         this.performanceService = performanceService;
+        this.resourceService = resourceService;
     }
 
     @GetMapping("/home")
@@ -37,8 +41,8 @@ public class PortalController {
                 .filter(item -> "RETURNED".equals(item.getSaleStatus()) || "LOCKED".equals(item.getSaleStatus()))
                 .limit(4)
                 .toList();
-        List<String> hotCities = distinctValues(all, true);
-        List<String> hotVenues = distinctValues(all, false);
+        List<String> hotCities = allCities(all);
+        List<String> hotVenues = distinctPerformanceValues(all, false);
         return Result.ok(Map.of(
                 "banners", List.of(
                         Map.of("title", "夏日城市舞台", "subtitle", "演出、电影、展览一站式发现", "image", "/uploads/banners/banner-01.svg", "targetId", 101),
@@ -50,7 +54,7 @@ public class PortalController {
                 "comingSoon", coming,
                 "onSale", hot,
                 "returned", inventoryUpdates,
-                "hotCities", hotCities.isEmpty() ? List.of("上海", "杭州", "南京", "深圳") : hotCities,
+                "hotCities", hotCities.isEmpty() ? List.of("上海", "杭州", "南京", "深圳", "北京") : hotCities,
                 "hotVenues", hotVenues.isEmpty() ? List.of("滨江音乐中心", "湖畔剧院", "紫金艺术厅", "云顶体育馆") : hotVenues,
                 "movies", dataService.movies().stream().limit(5).toList()
         ));
@@ -74,6 +78,8 @@ public class PortalController {
                 .filter(item -> normalizedKeyword.isBlank()
                         || safe(item.getTitle()).toLowerCase().contains(normalizedKeyword)
                         || safe(item.getVenue()).toLowerCase().contains(normalizedKeyword)
+                        || safe(item.getAddress()).toLowerCase().contains(normalizedKeyword)
+                        || safe(item.getCity()).toLowerCase().contains(normalizedKeyword)
                         || safe(item.getCategoryName()).toLowerCase().contains(normalizedKeyword))
                 .filter(item -> city == null || city.isBlank() || safe(item.getCity()).equals(city))
                 .filter(item -> category == null || category.isBlank()
@@ -86,7 +92,7 @@ public class PortalController {
                 "total", performances.size(),
                 "items", performances,
                 "filters", Map.of(
-                        "cities", distinctValues(all, true),
+                        "cities", allCities(all),
                         "statuses", List.of("ON_SALE", "COMING_SOON", "RETURNED", "LOCKED")
                 )
         ));
@@ -102,14 +108,24 @@ public class PortalController {
         return Result.ok(dataService.movie(id));
     }
 
-    private List<String> distinctValues(List<PerformanceCard> items, boolean city) {
+    private List<String> allCities(List<PerformanceCard> performances) {
+        LinkedHashSet<String> values = new LinkedHashSet<>(distinctPerformanceValues(performances, true));
+        resourceService.venues().stream()
+                .map(item -> Objects.toString(item.get("cityName"), ""))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .forEach(values::add);
+        return values.stream().limit(50).toList();
+    }
+
+    private List<String> distinctPerformanceValues(List<PerformanceCard> items, boolean city) {
         return items.stream()
                 .map(item -> city ? item.getCity() : item.getVenue())
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
                 .distinct()
-                .limit(12)
+                .limit(50)
                 .toList();
     }
 

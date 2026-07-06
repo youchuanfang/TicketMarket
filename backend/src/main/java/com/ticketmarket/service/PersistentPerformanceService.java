@@ -68,14 +68,17 @@ public class PersistentPerformanceService {
     }
 
     public List<PerformanceCard> adminPerformances() {
+        repairStoredImagePaths(null);
         return jdbcTemplate.query("select * from performance where deleted = 0 order by updated_at desc, id desc", this::mapPerformance);
     }
 
     public List<PerformanceCard> publicPerformances() {
+        repairStoredImagePaths(null);
         return jdbcTemplate.query("select * from performance where deleted = 0 and publish_status = 'PUBLISHED' order by start_time asc, id desc", this::mapPerformance);
     }
 
     public PerformanceCard adminPerformance(Long id) {
+        repairStoredImagePaths(id);
         PerformanceCard card = jdbcClient.sql("select * from performance where id = ? and deleted = 0")
                 .param(id)
                 .query(this::mapPerformance)
@@ -86,6 +89,7 @@ public class PersistentPerformanceService {
     }
 
     public PerformanceCard publicPerformance(Long id) {
+        repairStoredImagePaths(id);
         PerformanceCard card = jdbcClient.sql("select * from performance where id = ? and deleted = 0 and publish_status = 'PUBLISHED'")
                 .param(id)
                 .query(this::mapPerformance)
@@ -410,6 +414,47 @@ public class PersistentPerformanceService {
     private List<String> splitTags(String value) {
         if (value == null || value.isBlank()) return List.of();
         return Arrays.stream(value.split(",")).map(String::trim).filter(item -> !item.isBlank()).toList();
+    }
+
+    private void repairStoredImagePaths(Long performanceId) {
+        String performanceWhere = performanceId == null ? "deleted=0" : "id=? and deleted=0";
+        Object[] performanceArgs = performanceId == null ? new Object[]{} : new Object[]{performanceId};
+        List<Map<String, Object>> performances = jdbcTemplate.queryForList(
+                "select id, poster_path, banner_path, detail_image_path from performance where " + performanceWhere,
+                performanceArgs);
+        for (Map<String, Object> row : performances) {
+            Long id = ((Number) row.get("id")).longValue();
+            String poster = repairImageValue(Objects.toString(row.get("poster_path"), ""));
+            String banner = repairImageValue(Objects.toString(row.get("banner_path"), ""));
+            String detailImage = repairImageValue(Objects.toString(row.get("detail_image_path"), ""));
+            if (!Objects.equals(poster, Objects.toString(row.get("poster_path"), ""))
+                    || !Objects.equals(banner, Objects.toString(row.get("banner_path"), ""))
+                    || !Objects.equals(detailImage, Objects.toString(row.get("detail_image_path"), ""))) {
+                jdbcTemplate.update("""
+                        update performance set poster_path=?, banner_path=?, detail_image_path=?, updated_at=now()
+                        where id=? and deleted=0
+                        """, poster, banner, detailImage, id);
+            }
+        }
+
+        String blockWhere = performanceId == null ? "deleted=0 and image_path is not null and image_path <> ''" : "performance_id=? and deleted=0 and image_path is not null and image_path <> ''";
+        Object[] blockArgs = performanceId == null ? new Object[]{} : new Object[]{performanceId};
+        List<Map<String, Object>> blocks = jdbcTemplate.queryForList(
+                "select id, image_path from performance_detail_block where " + blockWhere,
+                blockArgs);
+        for (Map<String, Object> row : blocks) {
+            String original = Objects.toString(row.get("image_path"), "");
+            String repaired = repairImageValue(original);
+            if (!Objects.equals(repaired, original)) {
+                jdbcTemplate.update("update performance_detail_block set image_path=?, updated_at=now() where id=? and deleted=0",
+                        repaired, ((Number) row.get("id")).longValue());
+            }
+        }
+    }
+
+    private String repairImageValue(String value) {
+        String repaired = persistImagePath(value);
+        return repaired == null ? "" : repaired;
     }
 
     private String persistImagePath(String value) {

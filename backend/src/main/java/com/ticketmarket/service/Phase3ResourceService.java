@@ -121,8 +121,16 @@ public class Phase3ResourceService {
         return venue(id);
     }
 
-    public void deleteVenue(Long id) {
+    public void disableVenue(Long id) {
         jdbcTemplate.update("update venue set status='DISABLED', updated_at=now() where id=? and deleted=0", id);
+    }
+
+    @Transactional
+    public void deleteVenue(Long id) {
+        findVenue(id);
+        clearVenueSeats(id);
+        jdbcTemplate.update("update venue_area set status='DISABLED', deleted=1, updated_at=now() where venue_id=? and deleted=0", id);
+        jdbcTemplate.update("update venue set status='DISABLED', deleted=1, updated_at=now() where id=? and deleted=0", id);
     }
 
     public List<Map<String, Object>> areas(Long venueId) {
@@ -181,6 +189,9 @@ public class Phase3ResourceService {
     }
 
     public List<Map<String, Object>> generateSeats(Long venueId, Map<String, Object> payload) {
+        if (boolValue(payload, "clearExisting", true)) {
+            clearVenueSeats(venueId);
+        }
         if ("STADIUM".equals(str(payload, "layoutType", ""))) {
             return generateStadiumSeats(venueId);
         }
@@ -318,6 +329,14 @@ public class Phase3ResourceService {
         args.add(disabled ? "DISABLED" : "AVAILABLE");
         args.addAll(ids);
         jdbcTemplate.update("update seat set is_disabled=?, status=?, updated_at=now() where id in (" + in + ")", args.toArray());
+    }
+
+    @Transactional
+    public int clearVenueSeats(Long venueId) {
+        findVenue(venueId);
+        int sessionSeats = jdbcTemplate.update("delete from session_seat where venue_id=?", venueId);
+        int seats = jdbcTemplate.update("delete from seat where venue_id=?", venueId);
+        return sessionSeats + seats;
     }
 
     public List<Map<String, Object>> sessions() {

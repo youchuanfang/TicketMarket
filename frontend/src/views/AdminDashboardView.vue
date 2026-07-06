@@ -3,7 +3,7 @@
     <aside class="admin-sidebar">
       <RouterLink class="admin-brand" to="/admin">
         <span class="brand-mark">T</span>
-        <strong>鏄熺エ鍚庡彴</strong>
+        <strong>星票后台</strong>
       </RouterLink>
       <nav>
         <RouterLink
@@ -21,76 +21,77 @@
     <section class="admin-main">
       <header class="admin-header">
         <div>
-          <p class="eyebrow">TicketMarket 绠＄悊鍚庡彴</p>
-          <h1>{{ activeMenu?.title || '杩愯惀姒傝' }}</h1>
+          <p class="eyebrow">TicketMarket 管理后台</p>
+          <h1>{{ activeMenu?.title || '运营概览' }}</h1>
         </div>
         <div class="admin-userbar">
           <span>{{ user.profile?.nickname || user.profile?.username }}</span>
           <el-tag effect="plain">{{ roleText }}</el-tag>
-          <RouterLink to="/">杩斿洖鍓嶅彴</RouterLink>
-          <el-button size="small" @click="logout">閫€鍑虹櫥褰</el-button>
+          <RouterLink to="/">返回前台</RouterLink>
+          <el-button size="small" @click="logout">退出登录</el-button>
         </div>
       </header>
 
       <template v-if="activeSection === 'overview'">
         <div class="metric-grid">
-          <div class="metric"><span>婕斿嚭妗ｆ</span><strong>{{ metrics.performanceCount }}</strong></div>
-          <div class="metric"><span>鍦洪</span><strong>{{ venues.length }}</strong></div>
-          <div class="metric"><span>鍦烘</span><strong>{{ sessions.length }}</strong></div>
-          <div class="metric"><span>鍞エ鎵规</span><strong>{{ saleBatches.length }}</strong></div>
-          <div class="metric"><span>璁㈠崟</span><strong>{{ metrics.orderCount }}</strong></div>
-          <div class="metric"><span>寰呭閫€绁</span><strong>{{ metrics.refundPending }}</strong></div>
+          <div class="metric"><span>演出档案</span><strong>{{ metrics.performanceCount }}</strong></div>
+          <div class="metric"><span>场馆</span><strong>{{ venues.length }}</strong></div>
+          <div class="metric"><span>场次</span><strong>{{ sessions.length }}</strong></div>
+          <div class="metric"><span>售票批次</span><strong>{{ saleBatches.length }}</strong></div>
+          <div class="metric"><span>订单</span><strong>{{ metrics.orderCount }}</strong></div>
+          <div class="metric"><span>待审退票</span><strong>{{ metrics.refundPending }}</strong></div>
         </div>
         <section class="admin-card">
           <div class="table-head">
-            <h2>鍙戝竷娴佺▼</h2>
-            <el-button type="primary" plain @click="loadAll">鍒锋柊</el-button>
+            <h2>发布流程</h2>
+            <el-button type="primary" plain @click="loadAll">刷新</el-button>
           </div>
           <div class="admin-flow">
-            <span>1. 寤哄満棣嗗拰鍖哄煙</span>
-            <span>2. 鐢熸垚搴т綅鍥</span>
-            <span>3. 鍙戝竷婕斿嚭妗ｆ</span>
-            <span>4. 缁戝畾鍦烘</span>
-            <span>5. 璁剧疆绁ㄤ环鍜屽簱瀛</span>
-            <span>6. 閰嶇疆寮€鍞壒娆</span>
+            <span>1. 建场馆和区域</span>
+            <span>2. 生成座位图</span>
+            <span>3. 发布演出档案</span>
+            <span>4. 绑定场次</span>
+            <span>5. 设置票价和库存</span>
+            <span>6. 配置开售批次</span>
           </div>
         </section>
       </template>
 
       <section v-else-if="activeSection === 'performance'" class="admin-card">
         <div class="table-head">
-          <h2>婕斿嚭鍙戝竷</h2>
-          <el-button type="primary" @click="openPerformance()">鏂板缓婕斿嚭</el-button>
+          <h2>演出发布</h2>
+          <el-button type="primary" @click="openPerformance()">新建演出</el-button>
         </div>
-        <el-table :data="performances" border empty-text="鏆傛棤婕斿嚭">
-          <el-table-column label="娴锋姤" width="92">
+        <el-table :data="performances" border empty-text="暂无演出">
+          <el-table-column label="海报" width="92">
             <template #default="{ row }">
-              <img :src="row.poster" :alt="row.title" class="admin-thumb" />
+              <img v-if="assetUrl(row.poster)" :src="assetUrl(row.poster)" :alt="row.title" class="admin-thumb" />
+              <span v-else class="thumb-placeholder">待导入</span>
             </template>
           </el-table-column>
-          <el-table-column prop="title" label="婕斿嚭鍚嶇О" min-width="210" />
-          <el-table-column prop="categoryName" label="鍒嗙被" width="110" />
-          <el-table-column label="鍩庡競/鍦洪" min-width="200">
+          <el-table-column prop="title" label="演出名称" min-width="210" />
+          <el-table-column prop="categoryName" label="分类" width="110" />
+          <el-table-column label="城市/场馆" min-width="200">
             <template #default="{ row }">{{ row.city }} / {{ row.venue }}</template>
           </el-table-column>
-          <el-table-column label="浠锋牸" width="130">
-            <template #default="{ row }">楼{{ row.priceMin }} - 楼{{ row.priceMax }}</template>
+          <el-table-column label="价格" width="130">
+            <template #default="{ row }">￥{{ row.priceMin }} - ￥{{ row.priceMax }}</template>
           </el-table-column>
-          <el-table-column label="鍓嶅彴鐘舵€" width="120">
+          <el-table-column label="前台状态" width="120">
             <template #default="{ row }">{{ statusText(row.saleStatus) }}</template>
           </el-table-column>
-          <el-table-column label="鍙戝竷" width="100">
+          <el-table-column label="发布" width="100">
             <template #default="{ row }">
               <el-tag :type="row.publishStatus === 'PUBLISHED' ? 'success' : 'info'" effect="plain">
                 {{ row.publishStatus === 'PUBLISHED' ? '已发布' : '草稿' }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="鎿嶄綔" width="280" fixed="right">
+          <el-table-column label="操作" width="280" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openPerformance(row)">缂栬緫鍏ㄩ儴缁嗚妭</el-button>
-              <RouterLink class="table-link" :to="`/performances/${row.id}`">棰勮</RouterLink>
-              <el-button link type="danger" @click="unpublishPerformance(row)">涓嬫灦</el-button>
+              <el-button link type="primary" @click="openPerformance(row)">编辑全部细节</el-button>
+              <RouterLink class="table-link" :to="`/performances/${row.id}`">预览</RouterLink>
+              <el-button link type="danger" @click="unpublishPerformance(row)">下架</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -98,23 +99,24 @@
 
       <section v-else-if="activeSection === 'venue'" class="admin-card">
         <div class="table-head">
-          <h2>鍦洪绠＄悊</h2>
-          <el-button type="primary" @click="openVenue()">鏂板鍦洪</el-button>
+          <h2>场馆管理</h2>
+          <el-button type="primary" @click="openVenue()">新增场馆</el-button>
         </div>
-        <el-table :data="venues" border empty-text="鏆傛棤鍦洪">
-          <el-table-column prop="name" label="鍦洪" min-width="150" />
-          <el-table-column prop="cityName" label="鍩庡競" width="100" />
-          <el-table-column prop="address" label="鍦板潃" min-width="220" />
-          <el-table-column prop="capacity" label="瀹归噺" width="90" />
-          <el-table-column label="鐘舵€" width="100">
+        <el-table :data="venues" border empty-text="暂无场馆">
+          <el-table-column prop="name" label="场馆" min-width="150" />
+          <el-table-column prop="cityName" label="城市" width="100" />
+          <el-table-column prop="address" label="地址" min-width="220" />
+          <el-table-column prop="capacity" label="容量" width="90" />
+          <el-table-column label="状态" width="100">
             <template #default="{ row }">{{ statusText(row.status) }}</template>
           </el-table-column>
-          <el-table-column label="鎿嶄綔" width="300" fixed="right">
+          <el-table-column label="操作" width="340" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openVenue(row)">缂栬緫璧勬枡</el-button>
-              <RouterLink class="table-link" :to="`/admin/venue/${row.id}/areas`">鍖哄煙</RouterLink>
-              <RouterLink class="table-link" :to="`/admin/venue/${row.id}/seats`">搴т綅鍥</RouterLink>
-              <el-button link type="danger" @click="disableVenue(row)">绂佺敤</el-button>
+              <el-button link type="primary" @click="openVenue(row)">编辑资料</el-button>
+              <RouterLink class="table-link" :to="`/admin/venue/${row.id}/areas`">区域</RouterLink>
+              <RouterLink class="table-link" :to="`/admin/venue/${row.id}/seats`">座位图</RouterLink>
+              <el-button link type="danger" @click="disableVenue(row)">禁用</el-button>
+              <el-button link type="danger" @click="deleteVenue(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -122,22 +124,22 @@
 
       <section v-else-if="activeSection === 'venue-areas'" class="admin-card">
         <div class="table-head">
-          <h2>{{ selectedVenue?.name || '鍦洪' }}鍖哄煙</h2>
-          <el-button type="primary" @click="openArea()">鏂板鍖哄煙</el-button>
+          <h2>{{ selectedVenue?.name || '场馆' }}区域</h2>
+          <el-button type="primary" @click="openArea()">新增区域</el-button>
         </div>
-        <el-table :data="areas" border empty-text="鏆傛棤鍖哄煙">
-          <el-table-column prop="areaName" label="鍖哄煙" />
-          <el-table-column label="绫诲瀷" width="120">
+        <el-table :data="areas" border empty-text="暂无区域">
+          <el-table-column prop="areaName" label="区域" />
+          <el-table-column label="类型" width="120">
             <template #default="{ row }">{{ areaTypeText(row.areaType) }}</template>
           </el-table-column>
-          <el-table-column prop="defaultTicketLevel" label="榛樿绁ㄦ。" width="140" />
-          <el-table-column prop="sortOrder" label="鎺掑簭" width="90" />
-          <el-table-column label="棰滆壊" width="100">
+          <el-table-column prop="defaultTicketLevel" label="默认票档" width="140" />
+          <el-table-column prop="sortOrder" label="排序" width="90" />
+          <el-table-column label="颜色" width="100">
             <template #default="{ row }"><span class="color-swatch" :style="{ background: row.color }" /></template>
           </el-table-column>
-          <el-table-column label="鎿嶄綔" width="140">
+          <el-table-column label="操作" width="140">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openArea(row)">缂栬緫</el-button>
+              <el-button link type="primary" @click="openArea(row)">编辑</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -145,59 +147,65 @@
 
       <section v-else-if="activeSection === 'seat-template'" class="admin-card">
         <div class="table-head">
-          <h2>搴т綅鍥剧敓鎴愬櫒</h2>
-          <el-button type="primary" @click="generateSeatTemplate">鐢熸垚搴т綅</el-button>
+          <h2>座位图生成器</h2>
+          <div class="head-actions">
+            <el-button type="danger" plain :disabled="!seatForm.venueId" @click="clearSeatTemplate(seatForm.venueId)">清空座位图</el-button>
+            <el-button type="primary" @click="generateSeatTemplate">生成座位</el-button>
+          </div>
         </div>
         <div class="resource-form">
-          <el-select v-model="seatForm.venueId" placeholder="閫夋嫨鍦洪" @change="loadAreasForSeatForm">
+          <el-select v-model="seatForm.venueId" placeholder="选择场馆" @change="loadAreasForSeatForm">
             <el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" />
           </el-select>
           <el-select v-model="seatForm.layoutType" placeholder="座位图模板">
             <el-option label="标准排座" value="STANDARD" />
             <el-option label="体育场馆 / 舞台环形看台" value="STADIUM" />
           </el-select>
-          <el-select v-model="seatForm.areaId" placeholder="閫夋嫨鍖哄煙">
+          <el-select v-model="seatForm.areaId" placeholder="选择区域">
             <el-option v-for="area in seatFormAreas" :key="area.id" :label="area.areaName" :value="area.id" />
           </el-select>
           <el-input-number v-model="seatForm.rowStart" :min="1" placeholder="起始排" />
           <el-input-number v-model="seatForm.rowEnd" :min="1" placeholder="结束排" />
-          <el-input-number v-model="seatForm.seatsPerRow" :min="1" placeholder="姣忔帓搴т綅" />
-          <el-input v-model="seatForm.aisleAfterSeats" placeholder="杩囬亾浣嶇疆锛屽 8,16" />
+          <el-input-number v-model="seatForm.seatsPerRow" :min="1" placeholder="每排座位" />
+          <el-input v-model="seatForm.aisleAfterSeats" placeholder="过道位置，如 8,16" />
         </div>
         <SeatSvg :seats="previewSeats" :venue="venues.find((venue) => venue.id === seatForm.venueId)" selectable />
       </section>
 
       <section v-else-if="activeSection === 'venue-seats'" class="admin-card">
         <div class="table-head">
-          <h2>{{ selectedVenue?.name || '鍦洪' }}搴т綅鍥</h2>
-          <el-tag>鐐瑰嚮搴т綅鏌ョ湅鐘舵€</el-tag>
+          <h2>{{ selectedVenue?.name || '场馆' }}座位图</h2>
+          <div class="head-actions">
+            <el-tag>点击座位查看状态</el-tag>
+            <el-button type="danger" plain :disabled="!selectedVenue" @click="clearSeatTemplate(selectedVenue.id)">清空座位图</el-button>
+          </div>
         </div>
         <SeatSvg :seats="venueSeats" :venue="selectedVenue" selectable @seat-click="showSeat" />
       </section>
 
       <section v-else-if="activeSection === 'session'" class="admin-card">
         <div class="table-head">
-          <h2>鍦烘绠＄悊</h2>
-          <el-button type="primary" @click="openSession()">鏂板鍦烘</el-button>
+          <h2>场次管理</h2>
+          <el-button type="primary" @click="openSession()">新增场次</el-button>
         </div>
-        <el-table :data="sessions" border empty-text="鏆傛棤鍦烘">
-          <el-table-column label="婕斿嚭" min-width="180">
+        <el-table :data="sessions" border empty-text="暂无场次">
+          <el-table-column label="演出" min-width="180">
             <template #default="{ row }">{{ performanceTitle(row.performanceId) }}</template>
           </el-table-column>
-          <el-table-column prop="sessionName" label="鍦烘" min-width="180" />
-          <el-table-column label="鍦洪" min-width="150">
+          <el-table-column prop="sessionName" label="场次" min-width="180" />
+          <el-table-column label="场馆" min-width="150">
             <template #default="{ row }">{{ venueName(row.venueId) }}</template>
           </el-table-column>
-          <el-table-column prop="saleStartTime" label="寮€鍞椂闂" width="170" />
-          <el-table-column prop="startTime" label="婕斿嚭鏃堕棿" width="170" />
-          <el-table-column label="妯″紡" width="130">
+          <el-table-column prop="saleStartTime" label="开售时间" width="170" />
+          <el-table-column prop="startTime" label="演出时间" width="170" />
+          <el-table-column label="模式" width="130">
             <template #default="{ row }">{{ purchaseModeText(row.purchaseMode) }}</template>
           </el-table-column>
-          <el-table-column label="鎿嶄綔" width="210" fixed="right">
+          <el-table-column label="操作" width="210" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openSession(row)">缂栬緫</el-button>
-              <el-button link type="success" @click="selectSessionForLevels(row)">绁ㄤ环</el-button>
-              <el-button link type="warning" @click="initSessionSeats(row)">鍒濆鍖栧骇浣</el-button>
+              <el-button link type="primary" @click="openSession(row)">编辑</el-button>
+              <el-button link type="success" @click="selectSessionForLevels(row)">票价</el-button>
+              <el-button link type="warning" @click="initSessionSeats(row)">初始化座位</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -205,27 +213,30 @@
 
       <section v-else-if="activeSection === 'ticket-level'" class="admin-card">
         <div class="table-head">
-          <h2>绁ㄦ。涓庣エ浠</h2>
+          <div>
+            <h2>票档与票价</h2>
+            <p class="section-note">演出发布会自动创建首批票档；这里用于发布后补改票价、区域和开放库存。</p>
+          </div>
           <div class="head-actions">
-            <el-select v-model="selectedSessionId" placeholder="閫夋嫨鍦烘" @change="loadTicketLevels">
+            <el-select v-model="selectedSessionId" placeholder="选择场次" @change="loadTicketLevels">
               <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
             </el-select>
-            <el-button type="primary" :disabled="!selectedSessionId" @click="openTicketLevel()">鏂板绁ㄦ。</el-button>
+            <el-button type="primary" :disabled="!selectedSessionId" @click="openTicketLevel()">新增票档</el-button>
           </div>
         </div>
-        <el-table :data="ticketLevels" border empty-text="璇峰厛閫夋嫨鍦烘">
-          <el-table-column prop="name" label="绁ㄦ。" />
-          <el-table-column label="鍖哄煙" width="140">
+        <el-table :data="ticketLevels" border empty-text="请先选择场次">
+          <el-table-column prop="name" label="票档" />
+          <el-table-column label="区域" width="140">
             <template #default="{ row }">{{ areaName(row.areaId) }}</template>
           </el-table-column>
-          <el-table-column prop="price" label="浠锋牸" width="120" />
-          <el-table-column prop="totalStock" label="鎬诲簱瀛" width="100" />
-          <el-table-column prop="releasedStock" label="宸插紑鏀" width="100" />
-          <el-table-column prop="unreleasedStock" label="鏈紑鏀" width="100" />
-          <el-table-column prop="soldStock" label="宸插敭" width="90" />
-          <el-table-column label="鎿嶄綔" width="130">
+          <el-table-column prop="price" label="价格" width="120" />
+          <el-table-column prop="totalStock" label="总库存" width="100" />
+          <el-table-column prop="releasedStock" label="已开放" width="100" />
+          <el-table-column prop="unreleasedStock" label="未开放" width="100" />
+          <el-table-column prop="soldStock" label="已售" width="90" />
+          <el-table-column label="操作" width="130">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openTicketLevel(row)">缂栬緫</el-button>
+              <el-button link type="primary" @click="openTicketLevel(row)">编辑</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -233,34 +244,37 @@
 
       <section v-else-if="activeSection === 'sale-batch'" class="admin-card">
         <div class="table-head">
-          <h2>寮€鍞壒娆</h2>
+          <div>
+            <h2>开售批次</h2>
+            <p class="section-note">演出发布会自动创建第一批开售；这里用于二次开售、分批释放和临时锁票。</p>
+          </div>
           <div class="head-actions">
-            <el-select v-model="selectedSessionId" placeholder="閫夋嫨鍦烘" @change="loadTicketLevels">
+            <el-select v-model="selectedSessionId" placeholder="选择场次" @change="loadTicketLevels">
               <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
             </el-select>
-            <el-button type="primary" :disabled="!selectedSessionId" @click="openBatch()">鍒涘缓鎵规</el-button>
+            <el-button type="primary" :disabled="!selectedSessionId" @click="openBatch()">创建批次</el-button>
           </div>
         </div>
-        <el-table :data="saleBatches" border empty-text="鏆傛棤鎵规">
-          <el-table-column label="鍦烘" min-width="180">
+        <el-table :data="saleBatches" border empty-text="暂无批次">
+          <el-table-column label="场次" min-width="180">
             <template #default="{ row }">{{ sessionLabel(sessionById(row.sessionId)) }}</template>
           </el-table-column>
-          <el-table-column prop="batchName" label="鎵规" min-width="160" />
-          <el-table-column prop="saleStartTime" label="寮€鍞椂闂" width="170" />
-          <el-table-column prop="lockTime" label="閿佺エ鏃堕棿" width="170" />
-          <el-table-column label="寮€鏀炬柟寮" width="110">
+          <el-table-column prop="batchName" label="批次" min-width="160" />
+          <el-table-column prop="saleStartTime" label="开售时间" width="170" />
+          <el-table-column prop="lockTime" label="锁票时间" width="170" />
+          <el-table-column label="开放方式" width="110">
             <template #default="{ row }">{{ releaseTypeText(row.releaseType) }}</template>
           </el-table-column>
-          <el-table-column prop="releaseQuantity" label="鏁伴噺" width="90" />
-          <el-table-column label="鐘舵€" width="100">
+          <el-table-column prop="releaseQuantity" label="数量" width="90" />
+          <el-table-column label="状态" width="100">
             <template #default="{ row }">{{ statusText(row.status) }}</template>
           </el-table-column>
-          <el-table-column label="鎿嶄綔" width="260" fixed="right">
+          <el-table-column label="操作" width="260" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openBatch(row)">缂栬緫</el-button>
-              <el-button link type="success" @click="startBatch(row)">寮€鍞</el-button>
-              <el-button link type="warning" @click="lockBatch(row)">閿佺エ</el-button>
-              <el-button link type="info" @click="initRedis(row)">鍒濆鍖栧簱瀛</el-button>
+              <el-button link type="primary" @click="openBatch(row)">编辑</el-button>
+              <el-button link type="success" @click="startBatch(row)">开售</el-button>
+              <el-button link type="warning" @click="lockBatch(row)">锁票</el-button>
+              <el-button link type="info" @click="initRedis(row)">初始化库存</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -268,19 +282,22 @@
 
       <section v-else-if="activeSection === 'stock-pool'" class="admin-card">
         <div class="table-head">
-          <h2>搴撳瓨姹</h2>
-          <el-tag type="info">閿佺エ鍚庡洖鏀跺拰閫€绁ㄥ緟閲婃斁搴撳瓨</el-tag>
+          <div>
+            <h2>库存池</h2>
+            <p class="section-note">只承接锁票后回收、退票待释放等异常回流库存，不作为日常发布入口。</p>
+          </div>
+          <el-tag type="info">高级维护</el-tag>
         </div>
-        <el-table :data="stockPool" border empty-text="鏆傛棤搴撳瓨">
-          <el-table-column prop="sessionId" label="鍦烘" width="100" />
-          <el-table-column prop="ticketLevelId" label="绁ㄦ。" width="100" />
-          <el-table-column label="鏉ユ簮">
+        <el-table :data="stockPool" border empty-text="暂无库存">
+          <el-table-column prop="sessionId" label="场次" width="100" />
+          <el-table-column prop="ticketLevelId" label="票档" width="100" />
+          <el-table-column label="来源">
             <template #default="{ row }">{{ sourceTypeText(row.sourceType) }}</template>
           </el-table-column>
           <el-table-column label="库存状态">
             <template #default="{ row }">{{ statusText(row.stockStatus) }}</template>
           </el-table-column>
-          <el-table-column label="鍙敤浜庝笅杞" width="140">
+          <el-table-column label="可用于下轮" width="140">
             <template #default="{ row }">{{ row.availableForNextBatch ? '可用' : '不可用' }}</template>
           </el-table-column>
         </el-table>
@@ -288,22 +305,22 @@
 
       <section v-else-if="activeSection === 'refunds'" class="admin-card">
         <div class="table-head">
-          <h2>閫€绁ㄥ鏍</h2>
-          <el-button type="primary" plain @click="loadOperations">鍒锋柊</el-button>
+          <h2>退票审核</h2>
+          <el-button type="primary" plain @click="loadOperations">刷新</el-button>
         </div>
         <el-table :data="refunds" border empty-text="暂无退票">
-          <el-table-column prop="orderId" label="璁㈠崟" width="100" />
-          <el-table-column label="閲戦" width="120">
-            <template #default="{ row }">楼{{ row.amount }}</template>
+          <el-table-column prop="orderId" label="订单" width="100" />
+          <el-table-column label="金额" width="120">
+            <template #default="{ row }">￥{{ row.amount }}</template>
           </el-table-column>
-          <el-table-column label="鐘舵€" width="120">
+          <el-table-column label="状态" width="120">
             <template #default="{ row }">{{ refundStatusText(row.status) }}</template>
           </el-table-column>
-          <el-table-column prop="message" label="璇存槑" />
-          <el-table-column label="鎿嶄綔" width="160">
+          <el-table-column prop="message" label="说明" />
+          <el-table-column label="操作" width="160">
             <template #default="{ row }">
-              <el-button v-if="row.status === 'APPLYING'" link type="primary" @click="approve(row)">閫氳繃</el-button>
-              <el-button v-if="row.status === 'APPLYING'" link type="danger" @click="reject(row)">椹冲洖</el-button>
+              <el-button v-if="row.status === 'APPLYING'" link type="primary" @click="approve(row)">通过</el-button>
+              <el-button v-if="row.status === 'APPLYING'" link type="danger" @click="reject(row)">驳回</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -311,178 +328,204 @@
 
       <section v-else-if="activeSection === 'reports'" class="admin-card">
         <div class="table-head">
-          <h2>缁熻鎶ヨ〃</h2>
-          <el-button type="primary" plain @click="loadOperations">鍒锋柊</el-button>
+          <h2>统计报表</h2>
+          <el-button type="primary" plain @click="loadOperations">刷新</el-button>
         </div>
         <div class="metric-grid">
-          <div class="metric"><span>璁㈠崟鏁</span><strong>{{ statistics.orderCount }}</strong></div>
-          <div class="metric"><span>閿€鍞</span><strong>楼{{ statistics.salesAmount }}</strong></div>
-          <div class="metric"><span>鐢靛瓙绁</span><strong>{{ statistics.ticketCount }}</strong></div>
-          <div class="metric"><span>閫€绁</span><strong>{{ statistics.refundCount }}</strong></div>
+          <div class="metric"><span>订单数</span><strong>{{ statistics.orderCount }}</strong></div>
+          <div class="metric"><span>销售额</span><strong>￥{{ statistics.salesAmount }}</strong></div>
+          <div class="metric"><span>电子票</span><strong>{{ statistics.ticketCount }}</strong></div>
+          <div class="metric"><span>退票</span><strong>{{ statistics.refundCount }}</strong></div>
         </div>
       </section>
 
       <template v-else-if="activeSection === 'checkin'">
         <div class="metric-grid">
-          <div class="metric"><span>浠婃棩鏍搁獙</span><strong>{{ checkerMetrics.checkinToday }}</strong></div>
-          <div class="metric"><span>閫氳繃鐜</span><strong>{{ checkerMetrics.successRate }}</strong></div>
-          <div class="metric wide"><span>閫氶亾鐘舵€</span><strong>{{ checkerMetrics.latestResult }}</strong></div>
+          <div class="metric"><span>今日核验</span><strong>{{ checkerMetrics.checkinToday }}</strong></div>
+          <div class="metric"><span>通过率</span><strong>{{ checkerMetrics.successRate }}</strong></div>
+          <div class="metric wide"><span>通道状态</span><strong>{{ checkerMetrics.latestResult }}</strong></div>
         </div>
         <section class="admin-card">
-          <h2>妫€绁ㄧ鐞</h2>
+          <h2>检票管理</h2>
           <div class="resource-form compact">
-            <el-input v-model="ticketCode" placeholder="杈撳叆绁ㄥ彿鎴栧叆鍦虹爜" />
-            <el-button type="primary" @click="verify">鏍搁獙</el-button>
+            <el-input v-model="ticketCode" placeholder="输入票号或入场码" />
+            <el-button type="primary" @click="verify">核验</el-button>
           </div>
-          <el-table :data="checkins" border empty-text="鏆傛棤鏍搁獙">
-            <el-table-column prop="ticketNo" label="绁ㄥ彿" />
-            <el-table-column prop="message" label="鏍搁獙缁撴灉" />
-            <el-table-column prop="createdAt" label="鏃堕棿" width="180" />
+          <el-table :data="checkins" border empty-text="暂无核验">
+            <el-table-column prop="ticketNo" label="票号" />
+            <el-table-column prop="message" label="核验结果" />
+            <el-table-column prop="createdAt" label="时间" width="180" />
           </el-table>
         </section>
       </template>
 
       <section v-else-if="activeSection === 'risk-logs'" class="admin-card">
         <div class="table-head">
-          <h2>椋庢帶鏃ュ織</h2>
-          <el-button type="primary" plain @click="loadOperations">鍒锋柊</el-button>
+          <h2>风控日志</h2>
+          <el-button type="primary" plain @click="loadOperations">刷新</el-button>
         </div>
-        <el-table :data="riskLogs" border empty-text="鏆傛棤鏃ュ織">
-          <el-table-column prop="action" label="绫诲瀷" width="140" />
-          <el-table-column prop="detail" label="鍐呭" />
-          <el-table-column prop="createdAt" label="鏃堕棿" width="180" />
+        <el-table :data="riskLogs" border empty-text="暂无日志">
+          <el-table-column prop="action" label="类型" width="140" />
+          <el-table-column prop="detail" label="内容" />
+          <el-table-column prop="createdAt" label="时间" width="180" />
         </el-table>
       </section>
 
       <section v-else class="admin-card empty-admin">
         <el-icon><FolderOpened /></el-icon>
         <h2>{{ activeMenu?.title }}</h2>
-        <p>璇ユā鍧楁殏鏈帴鍏ユ暟鎹</p>
+        <p>该模块暂未接入数据</p>
       </section>
     </section>
 
-    <el-dialog v-model="performanceDialog" :title="performanceForm.id ? '缂栬緫婕斿嚭' : '鏂板缓婕斿嚭'" width="980px" destroy-on-close>
+    <el-dialog v-model="performanceDialog" :title="performanceForm.id ? '编辑演出' : '新建演出'" width="980px" destroy-on-close>
       <el-form label-position="top" class="admin-editor-grid">
-        <el-form-item label="婕斿嚭鍚嶇О"><el-input v-model="performanceForm.title" /></el-form-item>
+        <el-form-item label="演出名称"><el-input v-model="performanceForm.title" /></el-form-item>
         <el-form-item label="短标题/副标题"><el-input v-model="performanceForm.subtitle" /></el-form-item>
-        <el-form-item label="鍒嗙被">
+        <el-form-item label="分类">
           <el-select v-model="performanceForm.categoryCode" @change="syncCategoryName">
             <el-option v-for="category in categories" :key="category.code" :label="category.name" :value="category.code" />
           </el-select>
         </el-form-item>
         <el-form-item label="发布状态">
           <el-select v-model="performanceForm.publishStatus">
-            <el-option label="鑽夌" value="DRAFT" />
+            <el-option label="草稿" value="DRAFT" />
             <el-option label="发布到前台" value="PUBLISHED" />
           </el-select>
         </el-form-item>
         <el-form-item label="前台售卖状态">
           <el-select v-model="performanceForm.saleStatus">
-            <el-option label="姝ｅ湪鍞エ" value="ON_SALE" />
+            <el-option label="正在售票" value="ON_SALE" />
             <el-option label="即将开售" value="COMING_SOON" />
-            <el-option label="绁ㄩ噺绱у紶" value="RETURNED" />
+            <el-option label="票量紧张" value="RETURNED" />
             <el-option label="已结束" value="LOCKED" />
           </el-select>
         </el-form-item>
-        <el-form-item label="璐エ妯″紡">
+        <el-form-item label="购票模式">
           <el-select v-model="performanceForm.saleMode">
-            <el-option label="鑷富閫夊骇" value="SELECTABLE" />
-            <el-option label="鑷姩鍒嗛厤" value="AUTO_ALLOCATE" />
+            <el-option label="自主选座" value="SELECTABLE" />
+            <el-option label="自动分配" value="AUTO_ALLOCATE" />
             <el-option label="只选区域" value="AREA_ONLY" />
-            <el-option label="绔欏腑" value="STANDING" />
+            <el-option label="站席" value="STANDING" />
           </el-select>
         </el-form-item>
-        <el-form-item label="鍏宠仈鍦洪">
-          <el-select v-model="performanceForm.venueId" placeholder="閫夋嫨鍦洪" clearable @change="syncPerformanceVenue">
+        <el-form-item label="关联场馆">
+          <el-select v-model="performanceForm.venueId" placeholder="选择场馆" clearable @change="syncPerformanceVenue">
             <el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="鍩庡競"><el-input v-model="performanceForm.city" /></el-form-item>
-        <el-form-item label="鍦洪鍚嶇О"><el-input v-model="performanceForm.venue" /></el-form-item>
-        <el-form-item label="鍦板潃"><el-input v-model="performanceForm.address" /></el-form-item>
-        <el-form-item label="棣栧満鏃堕棿"><el-input v-model="performanceForm.startTime" placeholder="2026-08-18 19:30" /></el-form-item>
-        <el-form-item label="鏈€浣庝环"><el-input-number v-model="performanceForm.priceMin" :min="0" /></el-form-item>
-        <el-form-item label="鏈€楂樹环"><el-input-number v-model="performanceForm.priceMax" :min="0" /></el-form-item>
-        <el-form-item label="多场演出时间" class="span-2">
-          <el-input v-model="performanceForm.sessionDatesText" type="textarea" :rows="4" placeholder="每行一个场次，例如：2026-07-10 19:30:00" />
+        <el-form-item label="城市"><el-input v-model="performanceForm.city" /></el-form-item>
+        <el-form-item label="场馆名称"><el-input v-model="performanceForm.venue" /></el-form-item>
+        <el-form-item label="地址"><el-input v-model="performanceForm.address" /></el-form-item>
+        <el-form-item label="首场时间">
+          <el-date-picker v-model="performanceForm.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择首场演出时间" />
         </el-form-item>
-        <el-form-item label="统一开售时间"><el-input v-model="performanceForm.quickSaleStartTime" placeholder="2026-07-01 10:00:00" /></el-form-item>
-        <el-form-item label="统一锁票时间"><el-input v-model="performanceForm.quickLockTime" placeholder="留空则为演出前 1 小时" /></el-form-item>
+        <el-form-item label="最低价"><el-input-number v-model="performanceForm.priceMin" :min="0" /></el-form-item>
+        <el-form-item label="最高价"><el-input-number v-model="performanceForm.priceMax" :min="0" /></el-form-item>
+        <el-form-item label="多场演出时间" class="span-2">
+          <div class="session-date-editor">
+            <div v-for="(date, index) in performanceForm.sessionDates" :key="index" class="session-date-row">
+              <el-date-picker v-model="performanceForm.sessionDates[index]" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择场次时间" />
+              <el-button :disabled="performanceForm.sessionDates.length <= 1" @click="removeSessionDate(index)">删除</el-button>
+            </div>
+            <el-button @click="addSessionDate">新增场次时间</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="统一开售时间">
+          <el-date-picker v-model="performanceForm.quickSaleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择统一开售时间" />
+        </el-form-item>
+        <el-form-item label="统一锁票时间">
+          <el-date-picker v-model="performanceForm.quickLockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="留空则为演出前 1 小时" clearable />
+        </el-form-item>
+        <el-form-item label="首批开放数量"><el-input-number v-model="performanceForm.quickBatchReleaseQuantity" :min="0" /></el-form-item>
         <el-form-item label="票档明细" class="span-2">
           <div class="quick-ticket-editor">
+            <p class="form-tip">发布时会按每个场次自动创建票档、开售批次和场次座位。体育场馆选择“看台/内场”，剧场和影院默认按座位区售卖。</p>
             <div v-for="(level, index) in performanceForm.quickTicketLevels" :key="index" class="quick-ticket-row">
-              <el-input v-model="level.name" placeholder="票档名称，如 ￥1717 内场" />
-              <el-select v-model="level.areaType" placeholder="区域类型">
-                <el-option label="内场" value="STANDING" />
-                <el-option label="看台" value="SEATED" />
-              </el-select>
-              <el-input v-model="level.areaName" placeholder="区域，如 内场/看台" />
-              <el-input-number v-model="level.price" :min="0" placeholder="价格" />
-              <el-input-number v-model="level.totalStock" :min="0" placeholder="总库存" />
-              <el-input-number v-model="level.releasedStock" :min="0" placeholder="开放库存" />
-              <el-color-picker v-model="level.color" />
+              <label class="quick-field">
+                <span>票档名称</span>
+                <el-input v-model="level.name" placeholder="如 看台票 ￥517" />
+              </label>
+              <label class="quick-field">
+                <span>区域</span>
+                <el-select v-model="level.areaType" placeholder="选择区域">
+                  <el-option v-for="option in quickAreaOptions" :key="option.value" :label="option.label" :value="option.value" />
+                </el-select>
+              </label>
+              <label class="quick-field small">
+                <span>价格</span>
+                <el-input-number v-model="level.price" :min="0" />
+              </label>
+              <label class="quick-field small">
+                <span>总库存</span>
+                <el-input-number v-model="level.totalStock" :min="0" />
+              </label>
+              <label class="quick-field small">
+                <span>开放库存</span>
+                <el-input-number v-model="level.releasedStock" :min="0" />
+              </label>
               <el-button type="danger" @click="removeQuickTicketLevel(index)">删除</el-button>
             </div>
             <el-button @click="addQuickTicketLevel">新增票档</el-button>
           </div>
         </el-form-item>
-        <el-form-item label="鏍囩锛岄€楀彿鍒嗛殧" class="span-2"><el-input v-model="performanceForm.tagsText" /></el-form-item>
-        <el-form-item label="娴锋姤" class="span-2">
+        <el-form-item label="标签，逗号分隔" class="span-2"><el-input v-model="performanceForm.tagsText" /></el-form-item>
+        <el-form-item label="海报" class="span-2">
           <div class="upload-row">
-            <img v-if="performanceForm.poster" :src="performanceForm.poster" alt="娴锋姤棰勮" class="poster-preview" />
+            <img v-if="assetUrl(performanceForm.poster)" :src="assetUrl(performanceForm.poster)" alt="海报预览" class="poster-preview" />
             <input type="file" accept="image/*" @change="setPerformancePoster" />
-            <el-input v-model="performanceForm.poster" placeholder="涔熷彲浠ョ洿鎺ュ～鍐欏浘鐗囧湴鍧€" />
+            <el-input v-model="performanceForm.poster" placeholder="也可以直接填写图片地址或 D:\desktop\poster.png" @change="importPerformancePosterIfLocal" />
             <el-button @click="importPerformancePoster">导入本机路径</el-button>
           </div>
         </el-form-item>
-        <el-form-item label="鍒楄〃鎽樿" class="span-2"><el-input v-model="performanceForm.summary" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="婕斿嚭浠嬬粛"><el-input v-model="performanceForm.intro" type="textarea" :rows="4" /></el-form-item>
-        <el-form-item label="婕旇亴浜哄憳"><el-input v-model="performanceForm.artistInfo" type="textarea" :rows="4" /></el-form-item>
-        <el-form-item label="鍦洪浠嬬粛"><el-input v-model="performanceForm.venueIntro" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="璐エ椤荤煡"><el-input v-model="performanceForm.purchaseNotice" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="列表摘要" class="span-2"><el-input v-model="performanceForm.summary" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item label="演出介绍"><el-input v-model="performanceForm.intro" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="演职人员"><el-input v-model="performanceForm.artistInfo" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="场馆介绍"><el-input v-model="performanceForm.venueIntro" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="购票须知"><el-input v-model="performanceForm.purchaseNotice" type="textarea" :rows="3" /></el-form-item>
         <el-form-item label="退票规则"><el-input v-model="performanceForm.refundRule" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="瑙傛紨椤荤煡"><el-input v-model="performanceForm.entryRule" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="观演须知"><el-input v-model="performanceForm.entryRule" type="textarea" :rows="3" /></el-form-item>
       </el-form>
       <div class="detail-builder">
         <div class="table-head">
-          <h3>璇︽儏椤垫帓鐗</h3>
+          <h3>详情页排版</h3>
           <div class="head-actions">
-            <el-button @click="addDetailBlock('HEADING')">鏍囬</el-button>
-            <el-button @click="addDetailBlock('PARAGRAPH')">鏂囧瓧</el-button>
-            <el-button @click="addDetailBlock('IMAGE')">鍥剧墖</el-button>
+            <el-button @click="addDetailBlock('HEADING')">标题</el-button>
+            <el-button @click="addDetailBlock('PARAGRAPH')">文字</el-button>
+            <el-button @click="addDetailBlock('IMAGE')">图片</el-button>
           </div>
         </div>
         <div v-for="(block, index) in performanceForm.detailBlocks" :key="index" class="detail-block-editor">
           <el-select v-model="block.type">
-            <el-option label="鏍囬" value="HEADING" />
-            <el-option label="娈佃惤" value="PARAGRAPH" />
-            <el-option label="鍥剧墖" value="IMAGE" />
+            <el-option label="标题" value="HEADING" />
+            <el-option label="段落" value="PARAGRAPH" />
+            <el-option label="图片" value="IMAGE" />
           </el-select>
           <template v-if="block.type === 'IMAGE'">
-            <img v-if="block.content" :src="block.content" alt="璇︽儏鍥鹃瑙" class="detail-preview" />
+            <img v-if="assetUrl(block.content)" :src="assetUrl(block.content)" alt="详情图预览" class="detail-preview" />
             <input type="file" accept="image/*" @change="setBlockImage(index, $event)" />
             <el-input v-model="block.content" placeholder="图片地址或上传图片" />
             <el-button @click="importBlockImage(index)">导入本机路径</el-button>
           </template>
           <el-input v-else v-model="block.content" type="textarea" :rows="block.type === 'HEADING' ? 1 : 3" />
           <div class="block-actions">
-            <el-button :disabled="index === 0" @click="moveBlock(index, -1)">涓婄Щ</el-button>
-            <el-button :disabled="index === performanceForm.detailBlocks.length - 1" @click="moveBlock(index, 1)">涓嬬Щ</el-button>
-            <el-button type="danger" @click="removeBlock(index)">鍒犻櫎</el-button>
+            <el-button :disabled="index === 0" @click="moveBlock(index, -1)">上移</el-button>
+            <el-button :disabled="index === performanceForm.detailBlocks.length - 1" @click="moveBlock(index, 1)">下移</el-button>
+            <el-button type="danger" @click="removeBlock(index)">删除</el-button>
           </div>
         </div>
       </div>
       <template #footer>
-        <el-button @click="performanceDialog = false">鍙栨秷</el-button>
-        <el-button type="primary" @click="savePerformance">淇濆瓨婕斿嚭</el-button>
+        <el-button @click="performanceDialog = false">取消</el-button>
+        <el-button type="primary" @click="savePerformance">保存演出</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="venueDialog" :title="venueForm.id ? '缂栬緫鍦洪' : '鏂板鍦洪'" width="680px">
+    <el-dialog v-model="venueDialog" :title="venueForm.id ? '编辑场馆' : '新增场馆'" width="680px">
       <el-form label-position="top" class="dialog-form">
-        <el-form-item label="鍦洪鍚嶇О"><el-input v-model="venueForm.name" /></el-form-item>
-        <el-form-item label="鍩庡競"><el-input v-model="venueForm.cityName" /></el-form-item>
-        <el-form-item label="璇︾粏鍦板潃"><el-input v-model="venueForm.address" /></el-form-item>
+        <el-form-item label="场馆名称"><el-input v-model="venueForm.name" /></el-form-item>
+        <el-form-item label="城市"><el-input v-model="venueForm.cityName" /></el-form-item>
+        <el-form-item label="详细地址"><el-input v-model="venueForm.address" /></el-form-item>
         <el-form-item label="场馆类型">
           <el-select v-model="venueForm.venueType">
             <el-option label="剧场 / 演出厅" value="THEATER" />
@@ -491,94 +534,94 @@
           </el-select>
         </el-form-item>
         <el-form-item label="舞台/银幕标签"><el-input v-model="venueForm.stageLabel" placeholder="舞台、主舞台、银幕" /></el-form-item>
-        <el-form-item label="瀹归噺"><el-input-number v-model="venueForm.capacity" :min="0" /></el-form-item>
-        <el-form-item label="鍦洪浠嬬粛"><el-input v-model="venueForm.description" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="容量"><el-input-number v-model="venueForm.capacity" :min="0" /></el-form-item>
+        <el-form-item label="场馆介绍"><el-input v-model="venueForm.description" type="textarea" :rows="4" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="venueDialog = false">鍙栨秷</el-button>
-        <el-button type="primary" @click="saveVenue">淇濆瓨鍦洪</el-button>
+        <el-button @click="venueDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveVenue">保存场馆</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="areaDialog" :title="areaForm.id ? '缂栬緫鍖哄煙' : '鏂板鍖哄煙'" width="560px">
+    <el-dialog v-model="areaDialog" :title="areaForm.id ? '编辑区域' : '新增区域'" width="560px">
       <el-form label-position="top" class="dialog-form">
-        <el-form-item label="鍖哄煙鍚嶇О"><el-input v-model="areaForm.areaName" /></el-form-item>
-        <el-form-item label="绫诲瀷">
+        <el-form-item label="区域名称"><el-input v-model="areaForm.areaName" /></el-form-item>
+        <el-form-item label="类型">
           <el-select v-model="areaForm.areaType">
-            <el-option label="鏈夊骇鍖哄煙" value="SEATED" />
-            <el-option label="绔欏腑鍖哄煙" value="STANDING" />
+            <el-option label="有座区域" value="SEATED" />
+            <el-option label="站席区域" value="STANDING" />
           </el-select>
         </el-form-item>
-        <el-form-item label="榛樿绁ㄦ。"><el-input v-model="areaForm.defaultTicketLevel" /></el-form-item>
-        <el-form-item label="鎺掑簭"><el-input-number v-model="areaForm.sortOrder" :min="1" /></el-form-item>
-        <el-form-item label="棰滆壊"><el-color-picker v-model="areaForm.color" /></el-form-item>
+        <el-form-item label="默认票档"><el-input v-model="areaForm.defaultTicketLevel" /></el-form-item>
+        <el-form-item label="排序"><el-input-number v-model="areaForm.sortOrder" :min="1" /></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="areaForm.color" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="areaDialog = false">鍙栨秷</el-button>
-        <el-button type="primary" @click="saveArea">淇濆瓨鍖哄煙</el-button>
+        <el-button @click="areaDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveArea">保存区域</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="sessionDialog" :title="sessionForm.id ? '缂栬緫鍦烘' : '鏂板鍦烘'" width="760px">
+    <el-dialog v-model="sessionDialog" :title="sessionForm.id ? '编辑场次' : '新增场次'" width="760px">
       <el-form label-position="top" class="admin-editor-grid">
-        <el-form-item label="婕斿嚭">
+        <el-form-item label="演出">
           <el-select v-model="sessionForm.performanceId">
             <el-option v-for="item in performances" :key="item.id" :label="item.title" :value="item.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="鍦洪">
+        <el-form-item label="场馆">
           <el-select v-model="sessionForm.venueId">
             <el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="鍦烘鍚嶇О"><el-input v-model="sessionForm.sessionName" /></el-form-item>
-        <el-form-item label="璐エ妯″紡">
+        <el-form-item label="场次名称"><el-input v-model="sessionForm.sessionName" /></el-form-item>
+        <el-form-item label="购票模式">
           <el-select v-model="sessionForm.purchaseMode">
-            <el-option label="鑷富閫夊骇" value="SELECTABLE" />
-            <el-option label="鑷姩鍒嗛厤" value="AUTO_ALLOCATE" />
+            <el-option label="自主选座" value="SELECTABLE" />
+            <el-option label="自动分配" value="AUTO_ALLOCATE" />
           </el-select>
         </el-form-item>
-        <el-form-item label="开售时间"><el-input v-model="sessionForm.saleStartTime" placeholder="2026-07-20 10:00:00" /></el-form-item>
-        <el-form-item label="閿佺エ鏃堕棿"><el-input v-model="sessionForm.lockTime" placeholder="2026-08-01 18:00:00" /></el-form-item>
-        <el-form-item label="鍏ュ満鏃堕棿"><el-input v-model="sessionForm.entryTime" /></el-form-item>
-        <el-form-item label="开始时间"><el-input v-model="sessionForm.startTime" /></el-form-item>
-        <el-form-item label="缁撴潫鏃堕棿"><el-input v-model="sessionForm.endTime" /></el-form-item>
+        <el-form-item label="开售时间"><el-date-picker v-model="sessionForm.saleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择开售时间" /></el-form-item>
+        <el-form-item label="锁票时间"><el-date-picker v-model="sessionForm.lockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择锁票时间" /></el-form-item>
+        <el-form-item label="入场时间"><el-date-picker v-model="sessionForm.entryTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择入场时间" /></el-form-item>
+        <el-form-item label="开始时间"><el-date-picker v-model="sessionForm.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择开始时间" /></el-form-item>
+        <el-form-item label="结束时间"><el-date-picker v-model="sessionForm.endTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择结束时间" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="sessionDialog = false">鍙栨秷</el-button>
-        <el-button type="primary" @click="saveSession">淇濆瓨鍦烘</el-button>
+        <el-button @click="sessionDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveSession">保存场次</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="ticketLevelDialog" :title="ticketLevelForm.id ? '缂栬緫绁ㄦ。' : '鏂板绁ㄦ。'" width="620px">
+    <el-dialog v-model="ticketLevelDialog" :title="ticketLevelForm.id ? '编辑票档' : '新增票档'" width="620px">
       <el-form label-position="top" class="dialog-form">
-        <el-form-item label="绁ㄦ。鍚嶇О"><el-input v-model="ticketLevelForm.name" /></el-form-item>
-        <el-form-item label="鍏宠仈鍖哄煙">
-          <el-select v-model="ticketLevelForm.areaId" placeholder="閫夋嫨鍖哄煙">
+        <el-form-item label="票档名称"><el-input v-model="ticketLevelForm.name" /></el-form-item>
+        <el-form-item label="关联区域">
+          <el-select v-model="ticketLevelForm.areaId" placeholder="选择区域">
             <el-option v-for="area in ticketLevelAreas" :key="area.id" :label="area.areaName" :value="area.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="浠锋牸"><el-input-number v-model="ticketLevelForm.price" :min="0" /></el-form-item>
+        <el-form-item label="价格"><el-input-number v-model="ticketLevelForm.price" :min="0" /></el-form-item>
         <el-form-item label="总库存"><el-input-number v-model="ticketLevelForm.totalStock" :min="0" /></el-form-item>
         <el-form-item label="已开放库存"><el-input-number v-model="ticketLevelForm.releasedStock" :min="0" /></el-form-item>
         <el-form-item label="未开放库存"><el-input-number v-model="ticketLevelForm.unreleasedStock" :min="0" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="ticketLevelDialog = false">鍙栨秷</el-button>
-        <el-button type="primary" @click="saveTicketLevel">淇濆瓨绁ㄦ。</el-button>
+        <el-button @click="ticketLevelDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveTicketLevel">保存票档</el-button>
       </template>
     </el-dialog>
 
     <el-dialog v-model="batchDialog" :title="batchForm.id ? '编辑开售批次' : '创建开售批次'" width="680px">
       <el-form label-position="top" class="dialog-form">
-        <el-form-item label="鍦烘">
+        <el-form-item label="场次">
           <el-select v-model="batchForm.sessionId">
             <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="鎵规鍚嶇О"><el-input v-model="batchForm.batchName" /></el-form-item>
-        <el-form-item label="开售时间"><el-input v-model="batchForm.saleStartTime" /></el-form-item>
-        <el-form-item label="閿佺エ鏃堕棿"><el-input v-model="batchForm.lockTime" /></el-form-item>
+        <el-form-item label="批次名称"><el-input v-model="batchForm.batchName" /></el-form-item>
+        <el-form-item label="开售时间"><el-date-picker v-model="batchForm.saleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择开售时间" /></el-form-item>
+        <el-form-item label="锁票时间"><el-date-picker v-model="batchForm.lockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择锁票时间" /></el-form-item>
         <el-form-item label="开放方式">
           <el-select v-model="batchForm.releaseType">
             <el-option label="全部开放" value="FULL" />
@@ -587,11 +630,11 @@
           </el-select>
         </el-form-item>
         <el-form-item label="开放数量"><el-input-number v-model="batchForm.releaseQuantity" :min="0" /></el-form-item>
-        <el-form-item label="姣忎汉闄愯喘"><el-input-number v-model="batchForm.purchaseLimit" :min="1" /></el-form-item>
+        <el-form-item label="每人限购"><el-input-number v-model="batchForm.purchaseLimit" :min="1" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="batchDialog = false">鍙栨秷</el-button>
-        <el-button type="primary" @click="saveBatch">淇濆瓨鎵规</el-button>
+        <el-button @click="batchDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveBatch">保存批次</el-button>
       </template>
     </el-dialog>
   </div>
@@ -599,13 +642,14 @@
 
 <script setup>
 import { computed, h, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { http } from '../api/http'
 import { adminApi } from '../api/adminResources'
 import { getCategories } from '../api/portal'
 import { approveRefund, getAdminRefunds, getCheckins, getRiskLogs, getStatisticsOverview, rejectRefund, verifyTicket } from '../api/operations'
 import { useUserStore } from '../stores/user'
+import { assetUrl } from '../utils/assets'
 
 const SeatSvg = {
   props: { seats: { type: Array, default: () => [] }, selectable: Boolean, venue: { type: Object, default: () => ({}) } },
@@ -751,13 +795,29 @@ const visibleMenus = computed(() => menus.filter((item) => item.roles.includes(u
 const activeMenu = computed(() => menus.find((item) => item.key === activeSection.value))
 const roleText = computed(() => roleMap[user.role] || user.role)
 const selectedVenue = computed(() => venues.value.find((item) => String(item.id) === String(route.params.id || seatForm.venueId)))
+const selectedPerformanceVenue = computed(() => venues.value.find((item) => String(item.id) === String(performanceForm.venueId)))
+const quickAreaOptions = computed(() => {
+  const venueType = selectedPerformanceVenue.value?.venueType
+  if (venueType === 'STADIUM') {
+    return [
+      { label: '看台', value: 'SEATED' },
+      { label: '内场', value: 'STANDING' }
+    ]
+  }
+  if (venueType === 'CINEMA') return [{ label: '座位区', value: 'SEATED' }]
+  if (venueType === 'THEATER') return [{ label: '座位区', value: 'SEATED' }]
+  return [
+    { label: '看台', value: 'SEATED' },
+    { label: '内场', value: 'STANDING' }
+  ]
+})
 
 const clone = (value) => JSON.parse(JSON.stringify(value || {}))
 const sessionById = (id) => sessions.value.find((item) => String(item.id) === String(id))
-const performanceTitle = (id) => performances.value.find((item) => String(item.id) === String(id))?.title || `婕斿嚭 ${id || ''}`
-const venueName = (id) => venues.value.find((item) => String(item.id) === String(id))?.name || `鍦洪 ${id || ''}`
-const areaName = (id) => [...areas.value, ...seatFormAreas.value, ...ticketLevelAreas.value].find((item) => String(item.id) === String(id))?.areaName || `鍖哄煙 ${id || ''}`
-const sessionLabel = (session) => session ? `${performanceTitle(session.performanceId)} / ${session.sessionName}` : '鏈€夋嫨鍦烘'
+const performanceTitle = (id) => performances.value.find((item) => String(item.id) === String(id))?.title || `演出 ${id || ''}`
+const venueName = (id) => venues.value.find((item) => String(item.id) === String(id))?.name || `场馆 ${id || ''}`
+const areaName = (id) => [...areas.value, ...seatFormAreas.value, ...ticketLevelAreas.value].find((item) => String(item.id) === String(id))?.areaName || `区域 ${id || ''}`
+const sessionLabel = (session) => session ? `${performanceTitle(session.performanceId)} / ${session.sessionName}` : '未选择场次'
 
 async function loadAll() {
   if (user.canUseAdminApi) {
@@ -829,15 +889,17 @@ function emptyPerformance() {
     city: '上海',
     venue: '',
     address: '',
-    startTime: '2026-08-18 19:30',
+    startTime: '2026-08-18 19:30:00',
     priceMin: 180,
     priceMax: 680,
     sessionDatesText: '',
+    sessionDates: ['2026-08-18 19:30:00'],
     quickSaleStartTime: '2026-07-01 10:00:00',
     quickLockTime: '',
+    quickBatchReleaseQuantity: 0,
     quickTicketLevels: [
-      { name: '看台票 ￥517', areaName: '看台', areaType: 'SEATED', price: 517, totalStock: 1000, releasedStock: 1000, color: '#74c0fc' },
-      { name: '内场票 ￥1717', areaName: '内场', areaType: 'STANDING', price: 1717, totalStock: 600, releasedStock: 600, color: '#ff6b6b' }
+      { name: '看台票 ￥517', areaType: 'SEATED', price: 517, totalStock: 1000, releasedStock: 1000 },
+      { name: '内场票 ￥1717', areaType: 'STANDING', price: 1717, totalStock: 600, releasedStock: 600 }
     ],
     poster: '/uploads/posters/performance/poster-101.svg',
     banner: '',
@@ -900,9 +962,13 @@ function resetReactive(target, source) {
 function openPerformance(row) {
   const next = row ? clone(row) : emptyPerformance()
   next.tagsText = (next.tags || []).join(',') || next.tagsText || ''
+  const legacyDates = String(next.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime).filter(Boolean)
+  next.sessionDates = Array.isArray(next.sessionDates) && next.sessionDates.length
+    ? next.sessionDates.map(normalizeDateTime).filter(Boolean)
+    : (legacyDates.length ? legacyDates : [normalizeDateTime(next.startTime || emptyPerformance().startTime)])
   if (!next.detailBlocks?.length) {
     next.detailBlocks = [
-      { type: 'HEADING', content: '椤圭洰浠嬬粛' },
+      { type: 'HEADING', content: '项目介绍' },
       { type: 'PARAGRAPH', content: next.intro || next.summary || '' }
     ]
   }
@@ -921,6 +987,11 @@ function syncPerformanceVenue() {
   performanceForm.city = venue.cityName
   performanceForm.address = venue.address
   performanceForm.venueIntro = venue.description
+  if (venue.venueType !== 'STADIUM') {
+    performanceForm.quickTicketLevels.forEach((level) => {
+      level.areaType = 'SEATED'
+    })
+  }
 }
 
 async function uploadSelectedImage(event, callback) {
@@ -960,6 +1031,16 @@ async function importPerformancePoster() {
   ElMessage.success('海报已导入 uploads')
 }
 
+function looksLikeLocalImagePath(path) {
+  const value = String(path || '').trim()
+  return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\')
+}
+
+async function importPerformancePosterIfLocal() {
+  if (!looksLikeLocalImagePath(performanceForm.poster)) return
+  await importPerformancePoster()
+}
+
 async function importBlockImage(index) {
   const path = performanceForm.detailBlocks[index]?.content
   if (!path) {
@@ -989,11 +1070,20 @@ function removeBlock(index) {
 }
 
 function addQuickTicketLevel() {
-  performanceForm.quickTicketLevels.push({ name: '新票档', areaName: '看台', areaType: 'SEATED', price: 380, totalStock: 0, releasedStock: 0, color: '#74c0fc' })
+  performanceForm.quickTicketLevels.push({ name: '新票档', areaType: quickAreaOptions.value[0]?.value || 'SEATED', price: 380, totalStock: 100, releasedStock: 100 })
 }
 
 function removeQuickTicketLevel(index) {
   performanceForm.quickTicketLevels.splice(index, 1)
+}
+
+function addSessionDate() {
+  const base = performanceForm.sessionDates.at(-1) || performanceForm.startTime || '2026-08-18 19:30:00'
+  performanceForm.sessionDates.push(addHours(base, 24))
+}
+
+function removeSessionDate(index) {
+  performanceForm.sessionDates.splice(index, 1)
 }
 
 function normalizeDateTime(value) {
@@ -1013,27 +1103,45 @@ function addHours(dateTime, hours) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+function quickAreaName(level) {
+  const venueType = selectedPerformanceVenue.value?.venueType
+  if (venueType === 'STADIUM') return level.areaType === 'STANDING' ? '内场' : '看台'
+  if (venueType === 'CINEMA') return '座位区'
+  return '座位区'
+}
+
+function quickAreaColor(level) {
+  if (level.areaType === 'STANDING') return '#ff6b6b'
+  return selectedPerformanceVenue.value?.venueType === 'CINEMA' ? '#177e89' : '#74c0fc'
+}
+
 async function ensureQuickArea(venueId, level, index) {
   const currentAreas = await adminApi.areas(venueId)
-  const existing = currentAreas.find((area) => area.areaName === level.areaName)
+  const areaName = quickAreaName(level)
+  const existing = currentAreas.find((area) => area.areaName === areaName)
   if (existing) return existing
   return adminApi.createArea(venueId, {
-    areaName: level.areaName || level.name || `票区 ${index + 1}`,
+    areaName,
     areaType: level.areaType || 'SEATED',
     defaultTicketLevel: level.name,
     sortOrder: index + 1,
-    color: level.color || '#74c0fc'
+    color: quickAreaColor(level)
   })
 }
 
 async function createQuickSessionsAndTickets(performance) {
-  const dateRows = performanceForm.sessionDatesText.split(/\r?\n/).map(normalizeDateTime).filter(Boolean)
-  const levels = performanceForm.quickTicketLevels.filter((level) => Number(level.price || 0) > 0)
+  const rawDates = [
+    normalizeDateTime(performanceForm.startTime),
+    ...(performanceForm.sessionDates || []).map(normalizeDateTime),
+    ...String(performanceForm.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime)
+  ].filter(Boolean)
+  const dateRows = [...new Set(rawDates)]
+  const levels = performanceForm.quickTicketLevels.filter((level) => Number(level.price || 0) > 0 && Number(level.totalStock || 0) > 0)
   if (!performanceForm.venueId || !dateRows.length || !levels.length) return
   const areasByName = new Map()
   for (let i = 0; i < levels.length; i++) {
     const area = await ensureQuickArea(performanceForm.venueId, levels[i], i)
-    areasByName.set(levels[i].areaName, area)
+    areasByName.set(quickAreaName(levels[i]), area)
   }
   for (const startTime of dateRows) {
     const session = await adminApi.createSession({
@@ -1053,29 +1161,32 @@ async function createQuickSessionsAndTickets(performance) {
       await adminApi.createTicketLevel({
         sessionId: session.id,
         name: level.name,
-        areaId: areasByName.get(level.areaName)?.id,
+        areaId: areasByName.get(quickAreaName(level))?.id,
         price: Number(level.price || 0),
         totalStock: total,
         releasedStock: released,
         unreleasedStock: Math.max(0, total - released)
       })
     }
+    const autoReleaseQuantity = levels.reduce((sum, level) => sum + Number(level.releasedStock || level.totalStock || 0), 0)
     await adminApi.createSaleBatch({
       sessionId: session.id,
       batchName: '第一批开售',
       saleStartTime: normalizeDateTime(performanceForm.quickSaleStartTime || performanceForm.startTime),
       lockTime: normalizeDateTime(performanceForm.quickLockTime) || addHours(startTime, -1),
       releaseType: 'QUANTITY',
-      releaseQuantity: levels.reduce((sum, level) => sum + Number(level.releasedStock || level.totalStock || 0), 0),
+      releaseQuantity: Number(performanceForm.quickBatchReleaseQuantity || 0) || autoReleaseQuantity,
       purchaseLimit: 6,
       enableQueue: true,
       allowReturnDuringSale: true
     })
+    await adminApi.initSessionSeats(session.id)
   }
 }
 
 async function savePerformance() {
   syncCategoryName()
+  await importPerformancePosterIfLocal()
   const prices = performanceForm.quickTicketLevels.map((item) => Number(item.price || 0)).filter((value) => value > 0)
   if (prices.length) {
     performanceForm.priceMin = Math.min(...prices)
@@ -1095,7 +1206,7 @@ async function savePerformance() {
 
 async function unpublishPerformance(row) {
   await adminApi.updatePerformance(row.id, { ...row, publishStatus: 'DRAFT' })
-  ElMessage.success('婕斿嚭宸蹭笅鏋朵负鑽夌')
+  ElMessage.success('演出已下架为草稿')
   await loadAll()
 }
 
@@ -1113,8 +1224,19 @@ async function saveVenue() {
 }
 
 async function disableVenue(row) {
-  await adminApi.deleteVenue(row.id)
+  await adminApi.disableVenue(row.id)
   ElMessage.success('场馆已禁用')
+  await loadAll()
+}
+
+async function deleteVenue(row) {
+  await ElMessageBox.confirm(`确定删除场馆「${row.name}」吗？该场馆会从后台列表移除，座位模板也会清空。`, '删除场馆', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  await adminApi.deleteVenue(row.id)
+  ElMessage.success('场馆已删除')
   await loadAll()
 }
 
@@ -1133,8 +1255,26 @@ async function saveArea() {
 }
 
 async function generateSeatTemplate() {
-  previewSeats.value = await adminApi.generateSeats(seatForm.venueId, seatForm)
+  previewSeats.value = await adminApi.generateSeats(seatForm.venueId, { ...seatForm, clearExisting: true })
+  if (String(route.params.id || '') === String(seatForm.venueId)) {
+    await loadVenueSeatsForRoute()
+  }
   ElMessage.success(`已生成 ${previewSeats.value.length} 个座位/分区`)
+}
+
+async function clearSeatTemplate(venueId) {
+  if (!venueId) return
+  await ElMessageBox.confirm('确定清空该场馆的座位图吗？清空后可重新生成。', '清空座位图', {
+    confirmButtonText: '清空',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  const result = await adminApi.clearSeats(venueId)
+  previewSeats.value = []
+  if (String(route.params.id || '') === String(venueId)) {
+    await loadVenueSeatsForRoute()
+  }
+  ElMessage.success(`已清空 ${result.deleted || 0} 个座位/场次座位`)
 }
 
 const showSeat = (seat) => ElMessage.info(`${seat.seatLabel}: ${statusText(seat.status)}`)
@@ -1160,7 +1300,7 @@ async function selectSessionForLevels(row) {
 
 async function initSessionSeats(row) {
   await adminApi.initSessionSeats(row.id)
-  ElMessage.success('鍦烘搴т綅宸插垵濮嬪寲')
+  ElMessage.success('场次座位已初始化')
 }
 
 async function loadTicketLevelAreas() {
@@ -1196,7 +1336,7 @@ function openBatch(row) {
 async function saveBatch() {
   if (batchForm.id) await adminApi.updateSaleBatch(batchForm.id, batchForm)
   else await adminApi.createSaleBatch(batchForm)
-  ElMessage.success('寮€鍞壒娆″凡淇濆瓨')
+  ElMessage.success('开售批次已保存')
   batchDialog.value = false
   await loadAll()
 }
@@ -1215,18 +1355,18 @@ async function lockBatch(row) {
 
 async function initRedis(row) {
   await adminApi.initRedisStock(row.id)
-  ElMessage.success('瀹炴椂搴撳瓨宸插垵濮嬪寲')
+  ElMessage.success('实时库存已初始化')
 }
 
 async function approve(row) {
   await approveRefund(row.id)
-  ElMessage.success('閫€绁ㄥ鏍稿凡閫氳繃')
+  ElMessage.success('退票审核已通过')
   await loadOperations()
 }
 
 async function reject(row) {
   await rejectRefund(row.id)
-  ElMessage.success('閫€绁ㄧ敵璇峰凡椹冲洖')
+  ElMessage.success('退票申请已驳回')
   await loadOperations()
 }
 
@@ -1249,5 +1389,4 @@ async function logout() {
 watch(() => route.fullPath, () => loadAll())
 onMounted(() => loadAll())
 </script>
-
 

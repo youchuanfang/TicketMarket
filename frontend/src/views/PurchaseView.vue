@@ -30,7 +30,7 @@
         <strong>{{ modeText }}</strong>
         <p>售卖状态</p>
         <strong>{{ saleStatusText }}</strong>
-        <el-button type="primary" size="large" :disabled="saleStatus.status === 'SOLD_OUT' || saleStatus.status === 'ENDED'" :loading="submitting" @click="submit">{{ submitText }}</el-button>
+        <el-button type="primary" size="large" :disabled="submitDisabled" :loading="submitting" @click="submit">{{ submitText }}</el-button>
         <el-button v-if="selectedSession?.purchaseMode === 'SELECTABLE'" plain @click="goSeat">前往选座</el-button>
       </aside>
     </section>
@@ -72,6 +72,7 @@ const saleStatusText = computed(() => ({
   UNAVAILABLE: '暂不可售'
 }[saleStatus.value.status] || '请选择场次'))
 const submitText = computed(() => saleStatus.value.status === 'ON_SALE' ? '提交抢票' : '提交预约')
+const submitDisabled = computed(() => !form.sessionId || !form.ticketLevelId || ['SOLD_OUT', 'ENDED', 'UNAVAILABLE'].includes(saleStatus.value.status))
 
 const loadLevels = async () => {
   if (!form.sessionId) return

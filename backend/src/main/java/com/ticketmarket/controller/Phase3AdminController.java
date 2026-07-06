@@ -174,6 +174,12 @@ public class Phase3AdminController {
         return Result.ok();
     }
 
+    @PutMapping("/venues/{id}/disable")
+    public Result<Void> disableVenue(@PathVariable Long id) {
+        service.disableVenue(id);
+        return Result.ok();
+    }
+
     @GetMapping("/venues/{venueId}/areas")
     public Result<List<Map<String, Object>>> areas(@PathVariable Long venueId) {
         return Result.ok(service.areas(venueId));
@@ -203,6 +209,12 @@ public class Phase3AdminController {
     @PostMapping("/venues/{venueId}/seats/generate")
     public Result<List<Map<String, Object>>> generateSeats(@PathVariable Long venueId, @RequestBody Map<String, Object> payload) {
         return Result.ok(service.generateSeats(venueId, payload));
+    }
+
+    @DeleteMapping("/venues/{venueId}/seats")
+    public Result<Map<String, Object>> clearVenueSeats(@PathVariable Long venueId) {
+        int count = service.clearVenueSeats(venueId);
+        return Result.ok(Map.of("deleted", count));
     }
 
     @PutMapping("/seats/{id}")
