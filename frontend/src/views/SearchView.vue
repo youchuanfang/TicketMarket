@@ -2,7 +2,7 @@
   <div class="page narrow">
     <SectionHeader title="搜索结果" eyebrow="Search" />
     <div class="search-panel">
-      <el-input v-model="form.keyword" placeholder="关键词、演出、场馆" clearable />
+      <el-input v-model="form.keyword" placeholder="关键词、演出、场馆、地址" clearable />
       <el-select v-model="form.city" placeholder="城市" clearable>
         <el-option v-for="city in cities" :key="city" :label="city" :value="city" />
       </el-select>
@@ -40,7 +40,7 @@ const form = reactive({
   category: route.query.category || '',
   status: route.query.status || ''
 })
-const cities = ['上海', '杭州', '南京', '深圳']
+const cities = ref([])
 const categories = ref([])
 const items = ref([])
 const total = ref(0)
@@ -50,6 +50,7 @@ const load = async () => {
     const data = await searchPerformances(form)
     items.value = data.items
     total.value = data.total
+    cities.value = data.filters?.cities || []
   } catch (error) {
     ElMessage.error(error.message)
   }

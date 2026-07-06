@@ -1,7 +1,7 @@
 <template>
   <div class="page detail-page" v-if="movie">
     <section class="detail-hero">
-      <img :src="movie.poster" :alt="movie.title" class="detail-poster" />
+      <img :src="assetUrl(movie.poster)" :alt="movie.title" class="detail-poster" />
       <div class="detail-main">
         <p class="eyebrow">电影 · 选座购票</p>
         <h1>{{ movie.title }}</h1>
@@ -34,6 +34,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SectionHeader from '../components/SectionHeader.vue'
 import { getMovie } from '../api/portal'
+import { assetUrl } from '../utils/assets'
 
 const route = useRoute()
 const movie = ref(null)

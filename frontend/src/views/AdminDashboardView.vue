@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="admin-shell">
     <aside class="admin-sidebar">
       <RouterLink class="admin-brand" to="/admin">
@@ -21,7 +21,7 @@
     <section class="admin-main">
       <header class="admin-header">
         <div>
-          <p class="eyebrow">星票后台管理</p>
+          <p class="eyebrow">TicketMarket 管理后台</p>
           <h1>{{ activeMenu?.title || '运营概览' }}</h1>
         </div>
         <div class="admin-userbar">
@@ -34,44 +34,89 @@
 
       <template v-if="activeSection === 'overview'">
         <div class="metric-grid">
-          <div class="metric"><span>演出</span><strong>{{ metrics.performanceCount }}</strong></div>
-          <div class="metric"><span>电影</span><strong>{{ metrics.movieCount }}</strong></div>
+          <div class="metric"><span>演出档案</span><strong>{{ metrics.performanceCount }}</strong></div>
+          <div class="metric"><span>场馆</span><strong>{{ venues.length }}</strong></div>
+          <div class="metric"><span>场次</span><strong>{{ sessions.length }}</strong></div>
+          <div class="metric"><span>售票批次</span><strong>{{ saleBatches.length }}</strong></div>
           <div class="metric"><span>订单</span><strong>{{ metrics.orderCount }}</strong></div>
-          <div class="metric"><span>电子票</span><strong>{{ metrics.ticketCount }}</strong></div>
           <div class="metric"><span>待审退票</span><strong>{{ metrics.refundPending }}</strong></div>
-          <div class="metric"><span>今日核验</span><strong>{{ metrics.checkinToday }}</strong></div>
         </div>
         <section class="admin-card">
           <div class="table-head">
-            <h2>运营待办</h2>
+            <h2>发布流程</h2>
             <el-button type="primary" plain @click="loadAll">刷新</el-button>
           </div>
-          <el-table :data="todoRows" border empty-text="暂无数据">
-            <el-table-column prop="type" label="类型" width="140" />
-            <el-table-column prop="title" label="事项" />
-            <el-table-column prop="status" label="状态" width="120" />
-          </el-table>
+          <div class="admin-flow">
+            <span>1. 建场馆和区域</span>
+            <span>2. 生成座位图</span>
+            <span>3. 发布演出档案</span>
+            <span>4. 绑定场次</span>
+            <span>5. 设置票价和库存</span>
+            <span>6. 配置开售批次</span>
+          </div>
         </section>
       </template>
+
+      <section v-else-if="activeSection === 'performance'" class="admin-card">
+        <div class="table-head">
+          <h2>演出发布</h2>
+          <el-button type="primary" @click="openPerformance()">新建演出</el-button>
+        </div>
+        <el-table :data="performances" border empty-text="暂无演出">
+          <el-table-column label="海报" width="92">
+            <template #default="{ row }">
+              <img v-if="assetUrl(row.poster)" :src="assetUrl(row.poster)" :alt="row.title" class="admin-thumb" />
+              <span v-else class="thumb-placeholder">待导入</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="演出名称" min-width="210" />
+          <el-table-column prop="categoryName" label="分类" width="110" />
+          <el-table-column label="城市/场馆" min-width="200">
+            <template #default="{ row }">{{ row.city }} / {{ row.venue }}</template>
+          </el-table-column>
+          <el-table-column label="价格" width="130">
+            <template #default="{ row }">￥{{ row.priceMin }} - ￥{{ row.priceMax }}</template>
+          </el-table-column>
+          <el-table-column label="前台状态" width="120">
+            <template #default="{ row }">{{ statusText(row.saleStatus) }}</template>
+          </el-table-column>
+          <el-table-column label="发布" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.publishStatus === 'PUBLISHED' ? 'success' : 'info'" effect="plain">
+                {{ row.publishStatus === 'PUBLISHED' ? '已发布' : '草稿' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="280" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openPerformance(row)">编辑全部细节</el-button>
+              <RouterLink class="table-link" :to="`/performances/${row.id}`">预览</RouterLink>
+              <el-button link type="danger" @click="unpublishPerformance(row)">下架</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
 
       <section v-else-if="activeSection === 'venue'" class="admin-card">
         <div class="table-head">
           <h2>场馆管理</h2>
-          <el-button type="primary" @click="createVenue">新增场馆</el-button>
+          <el-button type="primary" @click="openVenue()">新增场馆</el-button>
         </div>
-        <el-table :data="venues" border empty-text="暂无数据">
+        <el-table :data="venues" border empty-text="暂无场馆">
           <el-table-column prop="name" label="场馆" min-width="150" />
           <el-table-column prop="cityName" label="城市" width="100" />
           <el-table-column prop="address" label="地址" min-width="220" />
           <el-table-column prop="capacity" label="容量" width="90" />
-          <el-table-column label="状态" width="110">
+          <el-table-column label="状态" width="100">
             <template #default="{ row }">{{ statusText(row.status) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="220">
+          <el-table-column label="操作" width="340" fixed="right">
             <template #default="{ row }">
+              <el-button link type="primary" @click="openVenue(row)">编辑资料</el-button>
               <RouterLink class="table-link" :to="`/admin/venue/${row.id}/areas`">区域</RouterLink>
               <RouterLink class="table-link" :to="`/admin/venue/${row.id}/seats`">座位图</RouterLink>
               <el-button link type="danger" @click="disableVenue(row)">禁用</el-button>
+              <el-button link type="danger" @click="deleteVenue(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -80,9 +125,9 @@
       <section v-else-if="activeSection === 'venue-areas'" class="admin-card">
         <div class="table-head">
           <h2>{{ selectedVenue?.name || '场馆' }}区域</h2>
-          <el-button type="primary" @click="createArea">新增区域</el-button>
+          <el-button type="primary" @click="openArea()">新增区域</el-button>
         </div>
-        <el-table :data="areas" border empty-text="暂无数据">
+        <el-table :data="areas" border empty-text="暂无区域">
           <el-table-column prop="areaName" label="区域" />
           <el-table-column label="类型" width="120">
             <template #default="{ row }">{{ areaTypeText(row.areaType) }}</template>
@@ -92,20 +137,29 @@
           <el-table-column label="颜色" width="100">
             <template #default="{ row }"><span class="color-swatch" :style="{ background: row.color }" /></template>
           </el-table-column>
-          <el-table-column label="状态" width="110">
-            <template #default="{ row }">{{ statusText(row.status) }}</template>
+          <el-table-column label="操作" width="140">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openArea(row)">编辑</el-button>
+            </template>
           </el-table-column>
         </el-table>
       </section>
 
       <section v-else-if="activeSection === 'seat-template'" class="admin-card">
         <div class="table-head">
-          <h2>座位模板生成器</h2>
-          <el-button type="primary" @click="generateSeatTemplate">生成座位</el-button>
+          <h2>座位图生成器</h2>
+          <div class="head-actions">
+            <el-button type="danger" plain :disabled="!seatForm.venueId" @click="clearSeatTemplate(seatForm.venueId)">清空座位图</el-button>
+            <el-button type="primary" @click="generateSeatTemplate">生成座位</el-button>
+          </div>
         </div>
         <div class="resource-form">
           <el-select v-model="seatForm.venueId" placeholder="选择场馆" @change="loadAreasForSeatForm">
             <el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" />
+          </el-select>
+          <el-select v-model="seatForm.layoutType" placeholder="座位图模板">
+            <el-option label="标准排座" value="STANDARD" />
+            <el-option label="体育场馆 / 舞台环形看台" value="STADIUM" />
           </el-select>
           <el-select v-model="seatForm.areaId" placeholder="选择区域">
             <el-option v-for="area in seatFormAreas" :key="area.id" :label="area.areaName" :value="area.id" />
@@ -115,35 +169,43 @@
           <el-input-number v-model="seatForm.seatsPerRow" :min="1" placeholder="每排座位" />
           <el-input v-model="seatForm.aisleAfterSeats" placeholder="过道位置，如 8,16" />
         </div>
-        <SeatSvg :seats="previewSeats" selectable />
+        <SeatSvg :seats="previewSeats" :venue="venues.find((venue) => venue.id === seatForm.venueId)" selectable />
       </section>
 
       <section v-else-if="activeSection === 'venue-seats'" class="admin-card">
         <div class="table-head">
           <h2>{{ selectedVenue?.name || '场馆' }}座位图</h2>
-          <el-tag>点击座位可查看状态</el-tag>
+          <div class="head-actions">
+            <el-tag>点击座位查看状态</el-tag>
+            <el-button type="danger" plain :disabled="!selectedVenue" @click="clearSeatTemplate(selectedVenue.id)">清空座位图</el-button>
+          </div>
         </div>
-        <SeatSvg :seats="venueSeats" selectable @seat-click="showSeat" />
+        <SeatSvg :seats="venueSeats" :venue="selectedVenue" selectable @seat-click="showSeat" />
       </section>
 
       <section v-else-if="activeSection === 'session'" class="admin-card">
         <div class="table-head">
           <h2>场次管理</h2>
-          <el-button type="primary" @click="createSession">新增场次</el-button>
+          <el-button type="primary" @click="openSession()">新增场次</el-button>
         </div>
-        <el-table :data="sessions" border empty-text="暂无数据">
+        <el-table :data="sessions" border empty-text="暂无场次">
+          <el-table-column label="演出" min-width="180">
+            <template #default="{ row }">{{ performanceTitle(row.performanceId) }}</template>
+          </el-table-column>
           <el-table-column prop="sessionName" label="场次" min-width="180" />
-          <el-table-column label="购票模式" width="150">
+          <el-table-column label="场馆" min-width="150">
+            <template #default="{ row }">{{ venueName(row.venueId) }}</template>
+          </el-table-column>
+          <el-table-column prop="saleStartTime" label="开售时间" width="170" />
+          <el-table-column prop="startTime" label="演出时间" width="170" />
+          <el-table-column label="模式" width="130">
             <template #default="{ row }">{{ purchaseModeText(row.purchaseMode) }}</template>
           </el-table-column>
-          <el-table-column prop="saleStartTime" label="开售时间" width="180" />
-          <el-table-column prop="lockTime" label="锁票时间" width="180" />
-          <el-table-column label="状态" width="120">
-            <template #default="{ row }">{{ statusText(row.status) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="150">
+          <el-table-column label="操作" width="210" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="initSessionSeats(row)">初始化座位</el-button>
+              <el-button link type="primary" @click="openSession(row)">编辑</el-button>
+              <el-button link type="success" @click="selectSessionForLevels(row)">票价</el-button>
+              <el-button link type="warning" @click="initSessionSeats(row)">初始化座位</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -151,43 +213,68 @@
 
       <section v-else-if="activeSection === 'ticket-level'" class="admin-card">
         <div class="table-head">
-          <h2>票档管理</h2>
-          <el-select v-model="selectedSessionId" placeholder="选择场次" @change="loadTicketLevels">
-            <el-option v-for="session in sessions" :key="session.id" :label="session.sessionName" :value="session.id" />
-          </el-select>
+          <div>
+            <h2>票档与票价</h2>
+            <p class="section-note">演出发布会自动创建首批票档；这里用于发布后补改票价、区域和开放库存。</p>
+          </div>
+          <div class="head-actions">
+            <el-select v-model="selectedSessionId" placeholder="选择场次" @change="loadTicketLevels">
+              <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
+            </el-select>
+            <el-button type="primary" :disabled="!selectedSessionId" @click="openTicketLevel()">新增票档</el-button>
+          </div>
         </div>
-        <el-table :data="ticketLevels" border empty-text="暂无数据">
+        <el-table :data="ticketLevels" border empty-text="请先选择场次">
           <el-table-column prop="name" label="票档" />
+          <el-table-column label="区域" width="140">
+            <template #default="{ row }">{{ areaName(row.areaId) }}</template>
+          </el-table-column>
           <el-table-column prop="price" label="价格" width="120" />
           <el-table-column prop="totalStock" label="总库存" width="100" />
           <el-table-column prop="releasedStock" label="已开放" width="100" />
           <el-table-column prop="unreleasedStock" label="未开放" width="100" />
           <el-table-column prop="soldStock" label="已售" width="90" />
-          <el-table-column prop="lockedStock" label="锁定" width="90" />
+          <el-table-column label="操作" width="130">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openTicketLevel(row)">编辑</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </section>
 
       <section v-else-if="activeSection === 'sale-batch'" class="admin-card">
         <div class="table-head">
-          <h2>售票批次管理</h2>
-          <el-button type="primary" @click="createBatch">创建批次</el-button>
+          <div>
+            <h2>开售批次</h2>
+            <p class="section-note">演出发布会自动创建第一批开售；这里用于二次开售、分批释放和临时锁票。</p>
+          </div>
+          <div class="head-actions">
+            <el-select v-model="selectedSessionId" placeholder="选择场次" @change="loadTicketLevels">
+              <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
+            </el-select>
+            <el-button type="primary" :disabled="!selectedSessionId" @click="openBatch()">创建批次</el-button>
+          </div>
         </div>
-        <el-table :data="saleBatches" border empty-text="暂无数据">
+        <el-table :data="saleBatches" border empty-text="暂无批次">
+          <el-table-column label="场次" min-width="180">
+            <template #default="{ row }">{{ sessionLabel(sessionById(row.sessionId)) }}</template>
+          </el-table-column>
           <el-table-column prop="batchName" label="批次" min-width="160" />
-          <el-table-column prop="saleStartTime" label="开售时间" width="180" />
-          <el-table-column prop="lockTime" label="锁票时间" width="180" />
+          <el-table-column prop="saleStartTime" label="开售时间" width="170" />
+          <el-table-column prop="lockTime" label="锁票时间" width="170" />
           <el-table-column label="开放方式" width="110">
             <template #default="{ row }">{{ releaseTypeText(row.releaseType) }}</template>
           </el-table-column>
-          <el-table-column prop="releaseQuantity" label="开放数量" width="110" />
-          <el-table-column label="状态" width="110">
+          <el-table-column prop="releaseQuantity" label="数量" width="90" />
+          <el-table-column label="状态" width="100">
             <template #default="{ row }">{{ statusText(row.status) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="260">
+          <el-table-column label="操作" width="260" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="startBatch(row)">开售</el-button>
+              <el-button link type="primary" @click="openBatch(row)">编辑</el-button>
+              <el-button link type="success" @click="startBatch(row)">开售</el-button>
               <el-button link type="warning" @click="lockBatch(row)">锁票</el-button>
-              <el-button link type="success" @click="initRedis(row)">初始化库存</el-button>
+              <el-button link type="info" @click="initRedis(row)">初始化库存</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -195,10 +282,13 @@
 
       <section v-else-if="activeSection === 'stock-pool'" class="admin-card">
         <div class="table-head">
-          <h2>库存池</h2>
-          <el-tag type="info">锁票后回收和退票待释放库存</el-tag>
+          <div>
+            <h2>库存池</h2>
+            <p class="section-note">只承接锁票后回收、退票待释放等异常回流库存，不作为日常发布入口。</p>
+          </div>
+          <el-tag type="info">高级维护</el-tag>
         </div>
-        <el-table :data="stockPool" border empty-text="暂无数据">
+        <el-table :data="stockPool" border empty-text="暂无库存">
           <el-table-column prop="sessionId" label="场次" width="100" />
           <el-table-column prop="ticketLevelId" label="票档" width="100" />
           <el-table-column label="来源">
@@ -207,7 +297,7 @@
           <el-table-column label="库存状态">
             <template #default="{ row }">{{ statusText(row.stockStatus) }}</template>
           </el-table-column>
-          <el-table-column label="可用于下一批" width="140">
+          <el-table-column label="可用于下轮" width="140">
             <template #default="{ row }">{{ row.availableForNextBatch ? '可用' : '不可用' }}</template>
           </el-table-column>
         </el-table>
@@ -218,10 +308,10 @@
           <h2>退票审核</h2>
           <el-button type="primary" plain @click="loadOperations">刷新</el-button>
         </div>
-        <el-table :data="refunds" border empty-text="暂无数据">
+        <el-table :data="refunds" border empty-text="暂无退票">
           <el-table-column prop="orderId" label="订单" width="100" />
           <el-table-column label="金额" width="120">
-            <template #default="{ row }">¥{{ row.amount }}</template>
+            <template #default="{ row }">￥{{ row.amount }}</template>
           </el-table-column>
           <el-table-column label="状态" width="120">
             <template #default="{ row }">{{ refundStatusText(row.status) }}</template>
@@ -243,11 +333,9 @@
         </div>
         <div class="metric-grid">
           <div class="metric"><span>订单数</span><strong>{{ statistics.orderCount }}</strong></div>
-          <div class="metric"><span>销售额</span><strong>¥{{ statistics.salesAmount }}</strong></div>
+          <div class="metric"><span>销售额</span><strong>￥{{ statistics.salesAmount }}</strong></div>
           <div class="metric"><span>电子票</span><strong>{{ statistics.ticketCount }}</strong></div>
           <div class="metric"><span>退票</span><strong>{{ statistics.refundCount }}</strong></div>
-          <div class="metric"><span>核验</span><strong>{{ statistics.checkinCount }}</strong></div>
-          <div class="metric"><span>抢票成功率</span><strong>{{ statistics.rushSuccessRate }}</strong></div>
         </div>
       </section>
 
@@ -259,11 +347,11 @@
         </div>
         <section class="admin-card">
           <h2>检票管理</h2>
-          <div class="resource-form">
+          <div class="resource-form compact">
             <el-input v-model="ticketCode" placeholder="输入票号或入场码" />
             <el-button type="primary" @click="verify">核验</el-button>
           </div>
-          <el-table :data="checkins" border empty-text="暂无数据">
+          <el-table :data="checkins" border empty-text="暂无核验">
             <el-table-column prop="ticketNo" label="票号" />
             <el-table-column prop="message" label="核验结果" />
             <el-table-column prop="createdAt" label="时间" width="180" />
@@ -276,7 +364,7 @@
           <h2>风控日志</h2>
           <el-button type="primary" plain @click="loadOperations">刷新</el-button>
         </div>
-        <el-table :data="riskLogs" border empty-text="暂无数据">
+        <el-table :data="riskLogs" border empty-text="暂无日志">
           <el-table-column prop="action" label="类型" width="140" />
           <el-table-column prop="detail" label="内容" />
           <el-table-column prop="createdAt" label="时间" width="180" />
@@ -286,23 +374,285 @@
       <section v-else class="admin-card empty-admin">
         <el-icon><FolderOpened /></el-icon>
         <h2>{{ activeMenu?.title }}</h2>
-        <p>暂无数据</p>
+        <p>该模块暂未接入数据</p>
       </section>
     </section>
+
+    <el-dialog v-model="performanceDialog" :title="performanceForm.id ? '编辑演出' : '新建演出'" width="980px" destroy-on-close>
+      <el-form label-position="top" class="admin-editor-grid">
+        <el-form-item label="演出名称"><el-input v-model="performanceForm.title" /></el-form-item>
+        <el-form-item label="短标题/副标题"><el-input v-model="performanceForm.subtitle" /></el-form-item>
+        <el-form-item label="分类">
+          <el-select v-model="performanceForm.categoryCode" @change="syncCategoryName">
+            <el-option v-for="category in categories" :key="category.code" :label="category.name" :value="category.code" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="发布状态">
+          <el-select v-model="performanceForm.publishStatus">
+            <el-option label="草稿" value="DRAFT" />
+            <el-option label="发布到前台" value="PUBLISHED" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="前台售卖状态">
+          <el-select v-model="performanceForm.saleStatus">
+            <el-option label="正在售票" value="ON_SALE" />
+            <el-option label="即将开售" value="COMING_SOON" />
+            <el-option label="票量紧张" value="RETURNED" />
+            <el-option label="已结束" value="LOCKED" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="购票模式">
+          <el-select v-model="performanceForm.saleMode">
+            <el-option label="自主选座" value="SELECTABLE" />
+            <el-option label="自动分配" value="AUTO_ALLOCATE" />
+            <el-option label="只选区域" value="AREA_ONLY" />
+            <el-option label="站席" value="STANDING" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联场馆">
+          <el-select v-model="performanceForm.venueId" placeholder="选择场馆" clearable @change="syncPerformanceVenue">
+            <el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="城市"><el-input v-model="performanceForm.city" /></el-form-item>
+        <el-form-item label="场馆名称"><el-input v-model="performanceForm.venue" /></el-form-item>
+        <el-form-item label="地址"><el-input v-model="performanceForm.address" /></el-form-item>
+        <el-form-item label="首场时间">
+          <el-date-picker v-model="performanceForm.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择首场演出时间" />
+        </el-form-item>
+        <el-form-item label="最低价"><el-input-number v-model="performanceForm.priceMin" :min="0" /></el-form-item>
+        <el-form-item label="最高价"><el-input-number v-model="performanceForm.priceMax" :min="0" /></el-form-item>
+        <el-form-item label="多场演出时间" class="span-2">
+          <div class="session-date-editor">
+            <div v-for="(date, index) in performanceForm.sessionDates" :key="index" class="session-date-row">
+              <el-date-picker v-model="performanceForm.sessionDates[index]" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择场次时间" />
+              <el-button :disabled="performanceForm.sessionDates.length <= 1" @click="removeSessionDate(index)">删除</el-button>
+            </div>
+            <el-button @click="addSessionDate">新增场次时间</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="统一开售时间">
+          <el-date-picker v-model="performanceForm.quickSaleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择统一开售时间" />
+        </el-form-item>
+        <el-form-item label="统一锁票时间">
+          <el-date-picker v-model="performanceForm.quickLockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="留空则为演出前 1 小时" clearable />
+        </el-form-item>
+        <el-form-item label="首批开放数量"><el-input-number v-model="performanceForm.quickBatchReleaseQuantity" :min="0" /></el-form-item>
+        <el-form-item label="票档明细" class="span-2">
+          <div class="quick-ticket-editor">
+            <p class="form-tip">发布时会按每个场次自动创建票档、开售批次和场次座位。体育场馆选择“看台/内场”，剧场和影院默认按座位区售卖。</p>
+            <div v-for="(level, index) in performanceForm.quickTicketLevels" :key="index" class="quick-ticket-row">
+              <label class="quick-field">
+                <span>票档名称</span>
+                <el-input v-model="level.name" placeholder="如 看台票 ￥517" />
+              </label>
+              <label class="quick-field">
+                <span>区域</span>
+                <el-select v-model="level.areaType" placeholder="选择区域">
+                  <el-option v-for="option in quickAreaOptions" :key="option.value" :label="option.label" :value="option.value" />
+                </el-select>
+              </label>
+              <label class="quick-field small">
+                <span>价格</span>
+                <el-input-number v-model="level.price" :min="0" />
+              </label>
+              <label class="quick-field small">
+                <span>总库存</span>
+                <el-input-number v-model="level.totalStock" :min="0" />
+              </label>
+              <label class="quick-field small">
+                <span>开放库存</span>
+                <el-input-number v-model="level.releasedStock" :min="0" />
+              </label>
+              <el-button type="danger" @click="removeQuickTicketLevel(index)">删除</el-button>
+            </div>
+            <el-button @click="addQuickTicketLevel">新增票档</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="标签，逗号分隔" class="span-2"><el-input v-model="performanceForm.tagsText" /></el-form-item>
+        <el-form-item label="海报" class="span-2">
+          <div class="upload-row">
+            <img v-if="assetUrl(performanceForm.poster)" :src="assetUrl(performanceForm.poster)" alt="海报预览" class="poster-preview" />
+            <input type="file" accept="image/*" @change="setPerformancePoster" />
+            <el-input v-model="performanceForm.poster" placeholder="也可以直接填写图片地址或 D:\desktop\poster.png" @change="importPerformancePosterIfLocal" />
+            <el-button @click="importPerformancePoster">导入本机路径</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="列表摘要" class="span-2"><el-input v-model="performanceForm.summary" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item label="演出介绍"><el-input v-model="performanceForm.intro" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="演职人员"><el-input v-model="performanceForm.artistInfo" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="场馆介绍"><el-input v-model="performanceForm.venueIntro" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="购票须知"><el-input v-model="performanceForm.purchaseNotice" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="退票规则"><el-input v-model="performanceForm.refundRule" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="观演须知"><el-input v-model="performanceForm.entryRule" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <div class="detail-builder">
+        <div class="table-head">
+          <h3>详情页排版</h3>
+          <div class="head-actions">
+            <el-button @click="addDetailBlock('HEADING')">标题</el-button>
+            <el-button @click="addDetailBlock('PARAGRAPH')">文字</el-button>
+            <el-button @click="addDetailBlock('IMAGE')">图片</el-button>
+          </div>
+        </div>
+        <div v-for="(block, index) in performanceForm.detailBlocks" :key="index" class="detail-block-editor">
+          <el-select v-model="block.type">
+            <el-option label="标题" value="HEADING" />
+            <el-option label="段落" value="PARAGRAPH" />
+            <el-option label="图片" value="IMAGE" />
+          </el-select>
+          <template v-if="block.type === 'IMAGE'">
+            <img v-if="assetUrl(block.content)" :src="assetUrl(block.content)" alt="详情图预览" class="detail-preview" />
+            <input type="file" accept="image/*" @change="setBlockImage(index, $event)" />
+            <el-input v-model="block.content" placeholder="图片地址或上传图片" />
+            <el-button @click="importBlockImage(index)">导入本机路径</el-button>
+          </template>
+          <el-input v-else v-model="block.content" type="textarea" :rows="block.type === 'HEADING' ? 1 : 3" />
+          <div class="block-actions">
+            <el-button :disabled="index === 0" @click="moveBlock(index, -1)">上移</el-button>
+            <el-button :disabled="index === performanceForm.detailBlocks.length - 1" @click="moveBlock(index, 1)">下移</el-button>
+            <el-button type="danger" @click="removeBlock(index)">删除</el-button>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="performanceDialog = false">取消</el-button>
+        <el-button type="primary" @click="savePerformance">保存演出</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="venueDialog" :title="venueForm.id ? '编辑场馆' : '新增场馆'" width="680px">
+      <el-form label-position="top" class="dialog-form">
+        <el-form-item label="场馆名称"><el-input v-model="venueForm.name" /></el-form-item>
+        <el-form-item label="城市"><el-input v-model="venueForm.cityName" /></el-form-item>
+        <el-form-item label="详细地址"><el-input v-model="venueForm.address" /></el-form-item>
+        <el-form-item label="场馆类型">
+          <el-select v-model="venueForm.venueType">
+            <el-option label="剧场 / 演出厅" value="THEATER" />
+            <el-option label="体育场馆 / 演唱会" value="STADIUM" />
+            <el-option label="影院 / 银幕厅" value="CINEMA" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="舞台/银幕标签"><el-input v-model="venueForm.stageLabel" placeholder="舞台、主舞台、银幕" /></el-form-item>
+        <el-form-item label="容量"><el-input-number v-model="venueForm.capacity" :min="0" /></el-form-item>
+        <el-form-item label="场馆介绍"><el-input v-model="venueForm.description" type="textarea" :rows="4" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="venueDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveVenue">保存场馆</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="areaDialog" :title="areaForm.id ? '编辑区域' : '新增区域'" width="560px">
+      <el-form label-position="top" class="dialog-form">
+        <el-form-item label="区域名称"><el-input v-model="areaForm.areaName" /></el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="areaForm.areaType">
+            <el-option label="有座区域" value="SEATED" />
+            <el-option label="站席区域" value="STANDING" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="默认票档"><el-input v-model="areaForm.defaultTicketLevel" /></el-form-item>
+        <el-form-item label="排序"><el-input-number v-model="areaForm.sortOrder" :min="1" /></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="areaForm.color" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="areaDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveArea">保存区域</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="sessionDialog" :title="sessionForm.id ? '编辑场次' : '新增场次'" width="760px">
+      <el-form label-position="top" class="admin-editor-grid">
+        <el-form-item label="演出">
+          <el-select v-model="sessionForm.performanceId">
+            <el-option v-for="item in performances" :key="item.id" :label="item.title" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="场馆">
+          <el-select v-model="sessionForm.venueId">
+            <el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="场次名称"><el-input v-model="sessionForm.sessionName" /></el-form-item>
+        <el-form-item label="购票模式">
+          <el-select v-model="sessionForm.purchaseMode">
+            <el-option label="自主选座" value="SELECTABLE" />
+            <el-option label="自动分配" value="AUTO_ALLOCATE" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="开售时间"><el-date-picker v-model="sessionForm.saleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择开售时间" /></el-form-item>
+        <el-form-item label="锁票时间"><el-date-picker v-model="sessionForm.lockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择锁票时间" /></el-form-item>
+        <el-form-item label="入场时间"><el-date-picker v-model="sessionForm.entryTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择入场时间" /></el-form-item>
+        <el-form-item label="开始时间"><el-date-picker v-model="sessionForm.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择开始时间" /></el-form-item>
+        <el-form-item label="结束时间"><el-date-picker v-model="sessionForm.endTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择结束时间" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="sessionDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveSession">保存场次</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="ticketLevelDialog" :title="ticketLevelForm.id ? '编辑票档' : '新增票档'" width="620px">
+      <el-form label-position="top" class="dialog-form">
+        <el-form-item label="票档名称"><el-input v-model="ticketLevelForm.name" /></el-form-item>
+        <el-form-item label="关联区域">
+          <el-select v-model="ticketLevelForm.areaId" placeholder="选择区域">
+            <el-option v-for="area in ticketLevelAreas" :key="area.id" :label="area.areaName" :value="area.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="价格"><el-input-number v-model="ticketLevelForm.price" :min="0" /></el-form-item>
+        <el-form-item label="总库存"><el-input-number v-model="ticketLevelForm.totalStock" :min="0" /></el-form-item>
+        <el-form-item label="已开放库存"><el-input-number v-model="ticketLevelForm.releasedStock" :min="0" /></el-form-item>
+        <el-form-item label="未开放库存"><el-input-number v-model="ticketLevelForm.unreleasedStock" :min="0" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="ticketLevelDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveTicketLevel">保存票档</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="batchDialog" :title="batchForm.id ? '编辑开售批次' : '创建开售批次'" width="680px">
+      <el-form label-position="top" class="dialog-form">
+        <el-form-item label="场次">
+          <el-select v-model="batchForm.sessionId">
+            <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="批次名称"><el-input v-model="batchForm.batchName" /></el-form-item>
+        <el-form-item label="开售时间"><el-date-picker v-model="batchForm.saleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择开售时间" /></el-form-item>
+        <el-form-item label="锁票时间"><el-date-picker v-model="batchForm.lockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择锁票时间" /></el-form-item>
+        <el-form-item label="开放方式">
+          <el-select v-model="batchForm.releaseType">
+            <el-option label="全部开放" value="FULL" />
+            <el-option label="按数量开放" value="QUANTITY" />
+            <el-option label="按比例开放" value="RATIO" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="开放数量"><el-input-number v-model="batchForm.releaseQuantity" :min="0" /></el-form-item>
+        <el-form-item label="每人限购"><el-input-number v-model="batchForm.purchaseLimit" :min="1" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveBatch">保存批次</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, h, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { http } from '../api/http'
 import { adminApi } from '../api/adminResources'
+import { getCategories } from '../api/portal'
 import { approveRefund, getAdminRefunds, getCheckins, getRiskLogs, getStatisticsOverview, rejectRefund, verifyTicket } from '../api/operations'
 import { useUserStore } from '../stores/user'
+import { assetUrl } from '../utils/assets'
 
 const SeatSvg = {
-  props: { seats: { type: Array, default: () => [] }, selectable: Boolean },
+  props: { seats: { type: Array, default: () => [] }, selectable: Boolean, venue: { type: Object, default: () => ({}) } },
   emits: ['seat-click'],
   setup(props, { emit }) {
     const color = (status) => ({
@@ -315,22 +665,37 @@ const SeatSvg = {
       REFUND_WAITING_RELEASE: '#0b7285',
       CHECKED_IN: '#495057'
     }[status] || '#2f9e44')
-    return () => h('div', { class: 'seat-map-wrap' }, [
-      h('div', { class: 'stage-line' }, '舞台 / 银幕'),
-      h('svg', { viewBox: '0 0 760 560', class: 'seat-map' },
-        props.seats.map((seat) => h('circle', {
+    const sectionFill = (seat) => seat.areaId % 4 === 0 ? '#ff6b6b' : seat.areaId % 4 === 1 ? '#74c0fc' : seat.areaId % 4 === 2 ? '#b2f2bb' : '#d0bfff'
+    return () => {
+      const stadium = props.venue?.venueType === 'STADIUM' || props.seats.some((seat) => seat.rowNo === 'AREA')
+      const stageLabel = props.venue?.stageLabel || '舞台'
+      const seatShapes = props.seats.map((seat) => seat.rowNo === 'AREA'
+        ? h('g', { class: props.selectable ? 'seat-section clickable' : 'seat-section', onClick: () => emit('seat-click', seat) }, [
+          h('rect', { x: seat.x - 23, y: seat.y - 14, width: 46, height: 28, rx: 3, fill: sectionFill(seat), stroke: '#111827', 'stroke-width': 1.5 }),
+          h('text', { x: seat.x, y: seat.y + 4, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 700, fill: '#111827' }, seat.seatLabel),
+          h('title', seat.seatLabel)
+        ])
+        : h('circle', {
           cx: seat.x,
           cy: seat.y,
           r: 8,
           fill: color(seat.status),
           class: props.selectable ? 'seat-dot clickable' : 'seat-dot',
           onClick: () => emit('seat-click', seat)
-        }, [h('title', seat.seatLabel || `${seat.rowNo}排${seat.seatNo}座`)]))
-      ),
-      h('div', { class: 'seat-legend' }, [
-        ['AVAILABLE', '可售'], ['LOCKED', '锁定'], ['SOLD', '已售'], ['DISABLED', '不可售'], ['UNRELEASED', '未开放'], ['POST_LOCK_RETURNED', '锁票后回收']
-      ].map(([status, label]) => h('span', [h('i', { style: { background: color(status) } }), label])))
-    ])
+        }, [h('title', seat.seatLabel || `${seat.rowNo}-${seat.seatNo}`)]))
+      return h('div', { class: ['seat-map-wrap', stadium ? 'stadium-map-wrap' : ''] }, [
+        h('div', { class: 'stage-line' }, stageLabel),
+        h('svg', { viewBox: '0 0 760 560', class: 'seat-map' }, [
+          stadium ? h('ellipse', { cx: 380, cy: 285, rx: 335, ry: 220, fill: 'none', stroke: '#d1d5db', 'stroke-width': 18 }) : null,
+          stadium ? h('rect', { x: 295, y: 215, width: 170, height: 115, fill: '#e5e7eb', stroke: '#9ca3af' }) : null,
+          stadium ? h('text', { x: 380, y: 280, 'text-anchor': 'middle', 'font-size': 28, 'font-weight': 800, fill: '#111827' }, stageLabel) : null,
+          ...seatShapes
+        ]),
+        h('div', { class: 'seat-legend' }, [
+          ['AVAILABLE', '可售'], ['LOCKED', '锁定'], ['SOLD', '已售'], ['DISABLED', '不可售'], ['UNRELEASED', '未开放'], ['POST_LOCK_RETURNED', '锁票回收']
+        ].map(([status, label]) => h('span', [h('i', { style: { background: color(status) } }), label])))
+      ])
+    }
   }
 }
 
@@ -340,12 +705,15 @@ const user = useUserStore()
 
 const metrics = reactive({ performanceCount: 0, movieCount: 0, orderCount: 0, ticketCount: 0, refundPending: 0, checkinToday: 0 })
 const checkerMetrics = reactive({ checkinToday: 0, successRate: '0%', latestResult: '暂无数据' })
+const performances = ref([])
+const categories = ref([])
 const venues = ref([])
 const areas = ref([])
 const venueSeats = ref([])
 const previewSeats = ref([])
 const sessions = ref([])
 const ticketLevels = ref([])
+const ticketLevelAreas = ref([])
 const saleBatches = ref([])
 const stockPool = ref([])
 const refunds = ref([])
@@ -355,37 +723,47 @@ const statistics = reactive({ orderCount: 0, salesAmount: 0, ticketCount: 0, ref
 const ticketCode = ref('')
 const selectedSessionId = ref(null)
 const seatFormAreas = ref([])
-const seatForm = reactive({ venueId: 1, areaId: 1, rowStart: 1, rowEnd: 3, seatsPerRow: 12, startX: 60, startY: 80, gapX: 30, gapY: 30, aisleAfterSeats: '6' })
+const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowStart: 1, rowEnd: 3, seatsPerRow: 12, startX: 60, startY: 80, gapX: 30, gapY: 30, aisleAfterSeats: '6' })
+
+const performanceDialog = ref(false)
+const venueDialog = ref(false)
+const areaDialog = ref(false)
+const sessionDialog = ref(false)
+const ticketLevelDialog = ref(false)
+const batchDialog = ref(false)
+const performanceForm = reactive(emptyPerformance())
+const venueForm = reactive(emptyVenue())
+const areaForm = reactive(emptyArea())
+const sessionForm = reactive(emptySession())
+const ticketLevelForm = reactive(emptyTicketLevel())
+const batchForm = reactive(emptyBatch())
 
 const roleMap = { ADMIN: '系统管理员', MANAGER: '票务管理员', CHECKER: '检票员' }
 const menus = [
   { key: 'overview', title: '运营概览', icon: 'DataAnalysis', path: '/admin', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'performance', title: '演出发布', icon: 'Management', path: '/admin/performance', roles: ['ADMIN', 'MANAGER'] },
   { key: 'venue', title: '场馆管理', icon: 'Location', path: '/admin/venue', roles: ['ADMIN', 'MANAGER'] },
   { key: 'seat-template', title: '座位模板', icon: 'Grid', path: '/admin/seat-template', roles: ['ADMIN', 'MANAGER'] },
   { key: 'session', title: '场次管理', icon: 'Calendar', path: '/admin/session', roles: ['ADMIN', 'MANAGER'] },
-  { key: 'ticket-level', title: '票档管理', icon: 'Tickets', path: '/admin/ticket-level', roles: ['ADMIN', 'MANAGER'] },
-  { key: 'sale-batch', title: '售票批次', icon: 'Clock', path: '/admin/sale-batch', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'ticket-level', title: '票档票价', icon: 'Tickets', path: '/admin/ticket-level', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'sale-batch', title: '开售批次', icon: 'Clock', path: '/admin/sale-batch', roles: ['ADMIN', 'MANAGER'] },
   { key: 'stock-pool', title: '库存池', icon: 'Box', path: '/admin/stock-pool', roles: ['ADMIN', 'MANAGER'] },
-  { key: 'orders', title: '订单管理', icon: 'Document', path: '/admin/orders', roles: ['ADMIN', 'MANAGER'] },
   { key: 'refunds', title: '退票审核', icon: 'RefreshLeft', path: '/admin/refunds', roles: ['ADMIN', 'MANAGER'] },
   { key: 'checkin', title: '检票管理', icon: 'Checked', path: '/admin/checkin', roles: ['ADMIN', 'MANAGER', 'CHECKER'] },
   { key: 'reports', title: '统计报表', icon: 'TrendCharts', path: '/admin/reports', roles: ['ADMIN', 'MANAGER'] },
-  { key: 'users', title: '用户管理', icon: 'User', path: '/admin/users', roles: ['ADMIN'] },
-  { key: 'roles', title: '角色权限', icon: 'Lock', path: '/admin/roles', roles: ['ADMIN'] },
   { key: 'risk-logs', title: '风控日志', icon: 'Warning', path: '/admin/risk-logs', roles: ['ADMIN'] }
 ]
-const todoRows = [
-  { type: '退票', title: '待审核退票申请', status: '待处理' },
-  { type: '售票', title: '即将开售批次', status: '待关注' },
-  { type: '核验', title: '今日入场核验', status: '进行中' }
-]
+
 const statusMap = {
   ENABLED: '启用',
   DISABLED: '禁用',
   SCHEDULED: '待开售',
   NOT_STARTED: '未开售',
   SELLING: '售票中',
-  LOCKED: '已锁票',
+  ON_SALE: '正在售票',
+  COMING_SOON: '即将开售',
+  RETURNED: '票量紧张',
+  LOCKED: '已锁票/结束',
   FINISHED: '已结束',
   AVAILABLE: '可售',
   UNRELEASED: '未开放',
@@ -395,29 +773,11 @@ const statusMap = {
   WAITING_RELEASE: '待释放',
   CHECKED_IN: '已核验'
 }
-const purchaseModeMap = {
-  SELECTABLE: '自主选座',
-  AUTO_ALLOCATE: '系统配座'
-}
-const releaseTypeMap = {
-  FULL: '全部开放',
-  PARTIAL: '分批开放',
-  MANUAL: '手动开放',
-  QUANTITY: '按数量开放',
-  RATIO: '按比例开放'
-}
-const areaTypeMap = {
-  SEATED: '有座区域',
-  STANDING: '站席区域'
-}
-const sourceTypeMap = {
-  POST_LOCK_RETURNED: '锁票回收',
-  POST_LOCK_RETURN: '锁票回收',
-  REFUND_WAITING_RELEASE: '退票待释放',
-  REFUND_RETURN: '退票回流',
-  UNRELEASED: '未开放库存',
-  MANUAL_ADD: '人工调整'
-}
+const purchaseModeMap = { SELECTABLE: '自主选座', AUTO_ALLOCATE: '系统配座', AREA_ONLY: '只选区域', STANDING: '站席' }
+const releaseTypeMap = { FULL: '全部开放', PARTIAL: '分批开放', MANUAL: '手动开放', QUANTITY: '按数量', RATIO: '按比例' }
+const areaTypeMap = { SEATED: '看台/有座', STANDING: '内场/站席' }
+const sourceTypeMap = { POST_LOCK_RETURNED: '锁票回收', POST_LOCK_RETURN: '锁票回收', REFUND_WAITING_RELEASE: '退票待释放', REFUND_RETURN: '退票回流', UNRELEASED: '未开放库存', MANUAL_ADD: '人工调整' }
+
 const textFromMap = (map, value) => map[value] || value || '暂无数据'
 const statusText = (value) => textFromMap(statusMap, value)
 const purchaseModeText = (value) => textFromMap(purchaseModeMap, value)
@@ -435,106 +795,582 @@ const visibleMenus = computed(() => menus.filter((item) => item.roles.includes(u
 const activeMenu = computed(() => menus.find((item) => item.key === activeSection.value))
 const roleText = computed(() => roleMap[user.role] || user.role)
 const selectedVenue = computed(() => venues.value.find((item) => String(item.id) === String(route.params.id || seatForm.venueId)))
+const selectedPerformanceVenue = computed(() => venues.value.find((item) => String(item.id) === String(performanceForm.venueId)))
+const quickAreaOptions = computed(() => {
+  const venueType = selectedPerformanceVenue.value?.venueType
+  if (venueType === 'STADIUM') {
+    return [
+      { label: '看台', value: 'SEATED' },
+      { label: '内场', value: 'STANDING' }
+    ]
+  }
+  if (venueType === 'CINEMA') return [{ label: '座位区', value: 'SEATED' }]
+  if (venueType === 'THEATER') return [{ label: '座位区', value: 'SEATED' }]
+  return [
+    { label: '看台', value: 'SEATED' },
+    { label: '内场', value: 'STANDING' }
+  ]
+})
 
-const loadAll = async () => {
+const clone = (value) => JSON.parse(JSON.stringify(value || {}))
+const sessionById = (id) => sessions.value.find((item) => String(item.id) === String(id))
+const performanceTitle = (id) => performances.value.find((item) => String(item.id) === String(id))?.title || `演出 ${id || ''}`
+const venueName = (id) => venues.value.find((item) => String(item.id) === String(id))?.name || `场馆 ${id || ''}`
+const areaName = (id) => [...areas.value, ...seatFormAreas.value, ...ticketLevelAreas.value].find((item) => String(item.id) === String(id))?.areaName || `区域 ${id || ''}`
+const sessionLabel = (session) => session ? `${performanceTitle(session.performanceId)} / ${session.sessionName}` : '未选择场次'
+
+async function loadAll() {
   if (user.canUseAdminApi) {
     Object.assign(metrics, await adminApi.dashboard())
-    venues.value = await adminApi.venues()
-    sessions.value = await adminApi.sessions()
-    saleBatches.value = await adminApi.saleBatches()
-    stockPool.value = await adminApi.stockPool()
+    const [categoryRows, performanceRows, venueRows, sessionRows, batchRows, poolRows] = await Promise.all([
+      getCategories(),
+      adminApi.performances(),
+      adminApi.venues(),
+      adminApi.sessions(),
+      adminApi.saleBatches(),
+      adminApi.stockPool()
+    ])
+    categories.value = categoryRows
+    performances.value = performanceRows
+    venues.value = venueRows
+    sessions.value = sessionRows
+    saleBatches.value = batchRows
+    stockPool.value = poolRows
     if (!selectedSessionId.value && sessions.value.length) selectedSessionId.value = sessions.value[0].id
-    await loadTicketLevels()
-    await loadAreasForRoute()
-    await loadVenueSeatsForRoute()
-    await loadAreasForSeatForm()
+    if (!seatForm.venueId && venues.value.length) seatForm.venueId = venues.value[0].id
+    await Promise.all([loadTicketLevels(), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
   }
   if (user.canUseChecker) Object.assign(checkerMetrics, await http.get('/api/checker/dashboard'))
   await loadOperations()
 }
-const loadOperations = async () => {
+
+async function loadOperations() {
   if (user.canUseAdminApi) {
     refunds.value = await getAdminRefunds()
     Object.assign(statistics, await getStatisticsOverview())
     riskLogs.value = await getRiskLogs()
   }
-  if (user.canUseChecker) {
-    checkins.value = await getCheckins()
-  }
-}
-const loadAreasForRoute = async () => {
-  if (route.params.id) areas.value = await adminApi.areas(route.params.id)
-}
-const loadVenueSeatsForRoute = async () => {
-  if (route.params.id) venueSeats.value = await adminApi.seats(route.params.id)
-}
-const loadAreasForSeatForm = async () => {
-  if (seatForm.venueId) seatFormAreas.value = await adminApi.areas(seatForm.venueId)
-  if (!seatForm.areaId && seatFormAreas.value.length) seatForm.areaId = seatFormAreas.value[0].id
-}
-const loadTicketLevels = async () => {
-  if (selectedSessionId.value) ticketLevels.value = await adminApi.ticketLevels(selectedSessionId.value)
+  if (user.canUseChecker) checkins.value = await getCheckins()
 }
 
-const createVenue = async () => {
-  await adminApi.createVenue({ name: '新场馆', cityName: '上海', address: '请补充详细地址', capacity: 100, description: '标准票务场馆' })
-  ElMessage.success('场馆已新增')
+async function loadAreasForRoute() {
+  if (route.params.id) areas.value = await adminApi.areas(route.params.id)
+}
+
+async function loadVenueSeatsForRoute() {
+  if (route.params.id) venueSeats.value = await adminApi.seats(route.params.id)
+}
+
+async function loadAreasForSeatForm() {
+  if (!seatForm.venueId) return
+  const venue = venues.value.find((item) => item.id === seatForm.venueId)
+  if (venue?.venueType === 'STADIUM') seatForm.layoutType = 'STADIUM'
+  seatFormAreas.value = await adminApi.areas(seatForm.venueId)
+  if (!seatFormAreas.value.some((area) => area.id === seatForm.areaId)) {
+    seatForm.areaId = seatFormAreas.value[0]?.id || null
+  }
+}
+
+async function loadTicketLevels() {
+  if (!selectedSessionId.value) return
+  ticketLevels.value = await adminApi.ticketLevels(selectedSessionId.value)
+  const session = sessionById(selectedSessionId.value)
+  ticketLevelAreas.value = session?.venueId ? await adminApi.areas(session.venueId) : []
+}
+
+function emptyPerformance() {
+  return {
+    id: null,
+    title: '',
+    subtitle: '',
+    categoryCode: 'concert',
+    categoryName: '演唱会',
+    venueId: null,
+    city: '上海',
+    venue: '',
+    address: '',
+    startTime: '2026-08-18 19:30:00',
+    priceMin: 180,
+    priceMax: 680,
+    sessionDatesText: '',
+    sessionDates: ['2026-08-18 19:30:00'],
+    quickSaleStartTime: '2026-07-01 10:00:00',
+    quickLockTime: '',
+    quickBatchReleaseQuantity: 0,
+    quickTicketLevels: [
+      { name: '看台票 ￥517', areaType: 'SEATED', price: 517, totalStock: 1000, releasedStock: 1000 },
+      { name: '内场票 ￥1717', areaType: 'STANDING', price: 1717, totalStock: 600, releasedStock: 600 }
+    ],
+    poster: '/uploads/posters/performance/poster-101.svg',
+    banner: '',
+    detailImage: '',
+    saleStatus: 'COMING_SOON',
+    saleMode: 'SELECTABLE',
+    publishStatus: 'DRAFT',
+    tagsText: '实名制,电子票,限购2张',
+    summary: '',
+    intro: '',
+    artistInfo: '',
+    venueIntro: '',
+    purchaseNotice: '',
+    refundRule: '',
+    entryRule: '',
+    detailBlocks: [
+      { type: 'HEADING', content: '项目介绍' },
+      { type: 'PARAGRAPH', content: '' }
+    ]
+  }
+}
+
+function emptyVenue() {
+  return { id: null, name: '', cityName: '上海', address: '', venueType: 'THEATER', stageLabel: '舞台', capacity: 0, description: '', status: 'ENABLED' }
+}
+
+function emptyArea() {
+  return { id: null, areaName: '', areaType: 'SEATED', defaultTicketLevel: '标准票', sortOrder: 1, color: '#d9303e' }
+}
+
+function emptySession() {
+  return {
+    id: null,
+    performanceId: performances.value[0]?.id || null,
+    venueId: venues.value[0]?.id || null,
+    sessionName: '',
+    saleStartTime: '2026-07-20 10:00:00',
+    lockTime: '2026-08-01 18:00:00',
+    entryTime: '2026-08-18 18:00:00',
+    startTime: '2026-08-18 19:30:00',
+    endTime: '2026-08-18 22:00:00',
+    purchaseMode: 'SELECTABLE',
+    status: 'SCHEDULED'
+  }
+}
+
+function emptyTicketLevel() {
+  return { id: null, sessionId: selectedSessionId.value, name: '标准票', price: 180, areaId: null, totalStock: 0, releasedStock: 0, unreleasedStock: 0, status: 'ENABLED' }
+}
+
+function emptyBatch() {
+  return { id: null, sessionId: selectedSessionId.value, batchName: '第一批开售', saleStartTime: '2026-07-20 10:00:00', lockTime: '2026-08-01 18:00:00', releaseType: 'QUANTITY', releaseQuantity: 50, releaseRatio: 0, purchaseLimit: 2, enableQueue: true, allowReturnDuringSale: true, status: 'NOT_STARTED' }
+}
+
+function resetReactive(target, source) {
+  Object.keys(target).forEach((key) => delete target[key])
+  Object.assign(target, source)
+}
+
+function openPerformance(row) {
+  const next = row ? clone(row) : emptyPerformance()
+  next.tagsText = (next.tags || []).join(',') || next.tagsText || ''
+  const legacyDates = String(next.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime).filter(Boolean)
+  next.sessionDates = Array.isArray(next.sessionDates) && next.sessionDates.length
+    ? next.sessionDates.map(normalizeDateTime).filter(Boolean)
+    : (legacyDates.length ? legacyDates : [normalizeDateTime(next.startTime || emptyPerformance().startTime)])
+  if (!next.detailBlocks?.length) {
+    next.detailBlocks = [
+      { type: 'HEADING', content: '项目介绍' },
+      { type: 'PARAGRAPH', content: next.intro || next.summary || '' }
+    ]
+  }
+  resetReactive(performanceForm, { ...emptyPerformance(), ...next })
+  performanceDialog.value = true
+}
+
+function syncCategoryName() {
+  performanceForm.categoryName = categories.value.find((item) => item.code === performanceForm.categoryCode)?.name || performanceForm.categoryName
+}
+
+function syncPerformanceVenue() {
+  const venue = venues.value.find((item) => item.id === performanceForm.venueId)
+  if (!venue) return
+  performanceForm.venue = venue.name
+  performanceForm.city = venue.cityName
+  performanceForm.address = venue.address
+  performanceForm.venueIntro = venue.description
+  if (venue.venueType !== 'STADIUM') {
+    performanceForm.quickTicketLevels.forEach((level) => {
+      level.areaType = 'SEATED'
+    })
+  }
+}
+
+async function uploadSelectedImage(event, callback) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  try {
+    const result = await adminApi.uploadImage(file)
+    callback(result.path)
+  } finally {
+    event.target.value = ''
+  }
+}
+
+function setPerformancePoster(event) {
+  uploadSelectedImage(event, (value) => {
+    performanceForm.poster = value
+    performanceForm.banner = value
+  })
+}
+
+function setBlockImage(index, event) {
+  uploadSelectedImage(event, (value) => {
+    performanceForm.detailBlocks[index].content = value
+    performanceForm.detailBlocks[index].imagePath = value
+    if (!performanceForm.detailImage) performanceForm.detailImage = value
+  })
+}
+
+async function importPerformancePoster() {
+  if (!performanceForm.poster) {
+    ElMessage.warning('请先填写本机图片路径')
+    return
+  }
+  const result = await adminApi.uploadLocalImage(performanceForm.poster)
+  performanceForm.poster = result.path
+  performanceForm.banner = result.path
+  ElMessage.success('海报已导入 uploads')
+}
+
+function looksLikeLocalImagePath(path) {
+  const value = String(path || '').trim()
+  return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\')
+}
+
+async function importPerformancePosterIfLocal() {
+  if (!looksLikeLocalImagePath(performanceForm.poster)) return
+  await importPerformancePoster()
+}
+
+async function importBlockImage(index) {
+  const path = performanceForm.detailBlocks[index]?.content
+  if (!path) {
+    ElMessage.warning('请先填写本机图片路径')
+    return
+  }
+  const result = await adminApi.uploadLocalImage(path)
+  performanceForm.detailBlocks[index].content = result.path
+  performanceForm.detailBlocks[index].imagePath = result.path
+  if (!performanceForm.detailImage) performanceForm.detailImage = result.path
+  ElMessage.success('详情图片已导入 uploads')
+}
+
+function addDetailBlock(type) {
+  performanceForm.detailBlocks.push({ type, content: type === 'HEADING' ? '新的小标题' : '' })
+}
+
+function moveBlock(index, offset) {
+  const target = index + offset
+  if (target < 0 || target >= performanceForm.detailBlocks.length) return
+  const [item] = performanceForm.detailBlocks.splice(index, 1)
+  performanceForm.detailBlocks.splice(target, 0, item)
+}
+
+function removeBlock(index) {
+  performanceForm.detailBlocks.splice(index, 1)
+}
+
+function addQuickTicketLevel() {
+  performanceForm.quickTicketLevels.push({ name: '新票档', areaType: quickAreaOptions.value[0]?.value || 'SEATED', price: 380, totalStock: 100, releasedStock: 100 })
+}
+
+function removeQuickTicketLevel(index) {
+  performanceForm.quickTicketLevels.splice(index, 1)
+}
+
+function addSessionDate() {
+  const base = performanceForm.sessionDates.at(-1) || performanceForm.startTime || '2026-08-18 19:30:00'
+  performanceForm.sessionDates.push(addHours(base, 24))
+}
+
+function removeSessionDate(index) {
+  performanceForm.sessionDates.splice(index, 1)
+}
+
+function normalizeDateTime(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 19:30:00`
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$/.test(text)) return `${text}:00`
+  return text
+}
+
+function addHours(dateTime, hours) {
+  const normalized = normalizeDateTime(dateTime).replace(' ', 'T')
+  const date = new Date(normalized)
+  if (Number.isNaN(date.getTime())) return dateTime
+  date.setHours(date.getHours() + hours)
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function quickAreaName(level) {
+  const venueType = selectedPerformanceVenue.value?.venueType
+  if (venueType === 'STADIUM') return level.areaType === 'STANDING' ? '内场' : '看台'
+  if (venueType === 'CINEMA') return '座位区'
+  return '座位区'
+}
+
+function quickAreaColor(level) {
+  if (level.areaType === 'STANDING') return '#ff6b6b'
+  return selectedPerformanceVenue.value?.venueType === 'CINEMA' ? '#177e89' : '#74c0fc'
+}
+
+async function ensureQuickArea(venueId, level, index) {
+  const currentAreas = await adminApi.areas(venueId)
+  const areaName = quickAreaName(level)
+  const existing = currentAreas.find((area) => area.areaName === areaName)
+  if (existing) return existing
+  return adminApi.createArea(venueId, {
+    areaName,
+    areaType: level.areaType || 'SEATED',
+    defaultTicketLevel: level.name,
+    sortOrder: index + 1,
+    color: quickAreaColor(level)
+  })
+}
+
+async function createQuickSessionsAndTickets(performance) {
+  const rawDates = [
+    normalizeDateTime(performanceForm.startTime),
+    ...(performanceForm.sessionDates || []).map(normalizeDateTime),
+    ...String(performanceForm.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime)
+  ].filter(Boolean)
+  const dateRows = [...new Set(rawDates)]
+  const levels = performanceForm.quickTicketLevels.filter((level) => Number(level.price || 0) > 0 && Number(level.totalStock || 0) > 0)
+  if (!performanceForm.venueId || !dateRows.length || !levels.length) return
+  const areasByName = new Map()
+  for (let i = 0; i < levels.length; i++) {
+    const area = await ensureQuickArea(performanceForm.venueId, levels[i], i)
+    areasByName.set(quickAreaName(levels[i]), area)
+  }
+  for (const startTime of dateRows) {
+    const session = await adminApi.createSession({
+      performanceId: performance.id,
+      venueId: performanceForm.venueId,
+      sessionName: `${performanceForm.title} ${startTime.slice(5, 16)}`,
+      saleStartTime: normalizeDateTime(performanceForm.quickSaleStartTime || performanceForm.startTime),
+      lockTime: normalizeDateTime(performanceForm.quickLockTime) || addHours(startTime, -1),
+      entryTime: addHours(startTime, -1),
+      startTime,
+      endTime: addHours(startTime, 2),
+      purchaseMode: performanceForm.saleMode
+    })
+    for (const level of levels) {
+      const total = Number(level.totalStock || 0)
+      const released = Number(level.releasedStock || total)
+      await adminApi.createTicketLevel({
+        sessionId: session.id,
+        name: level.name,
+        areaId: areasByName.get(quickAreaName(level))?.id,
+        price: Number(level.price || 0),
+        totalStock: total,
+        releasedStock: released,
+        unreleasedStock: Math.max(0, total - released)
+      })
+    }
+    const autoReleaseQuantity = levels.reduce((sum, level) => sum + Number(level.releasedStock || level.totalStock || 0), 0)
+    await adminApi.createSaleBatch({
+      sessionId: session.id,
+      batchName: '第一批开售',
+      saleStartTime: normalizeDateTime(performanceForm.quickSaleStartTime || performanceForm.startTime),
+      lockTime: normalizeDateTime(performanceForm.quickLockTime) || addHours(startTime, -1),
+      releaseType: 'QUANTITY',
+      releaseQuantity: Number(performanceForm.quickBatchReleaseQuantity || 0) || autoReleaseQuantity,
+      purchaseLimit: 6,
+      enableQueue: true,
+      allowReturnDuringSale: true
+    })
+    await adminApi.initSessionSeats(session.id)
+  }
+}
+
+async function savePerformance() {
+  syncCategoryName()
+  await importPerformancePosterIfLocal()
+  const prices = performanceForm.quickTicketLevels.map((item) => Number(item.price || 0)).filter((value) => value > 0)
+  if (prices.length) {
+    performanceForm.priceMin = Math.min(...prices)
+    performanceForm.priceMax = Math.max(...prices)
+  }
+  const payload = {
+    ...clone(performanceForm),
+    tags: performanceForm.tagsText.split(',').map((item) => item.trim()).filter(Boolean),
+    detailImage: performanceForm.detailBlocks.find((item) => item.type === 'IMAGE' && item.content)?.content || performanceForm.detailImage
+  }
+  const saved = payload.id ? await adminApi.updatePerformance(payload.id, payload) : await adminApi.createPerformance(payload)
+  if (!payload.id) await createQuickSessionsAndTickets(saved)
+  ElMessage.success('演出已保存')
+  performanceDialog.value = false
   await loadAll()
 }
-const disableVenue = async (row) => {
-  await adminApi.deleteVenue(row.id)
+
+async function unpublishPerformance(row) {
+  await adminApi.updatePerformance(row.id, { ...row, publishStatus: 'DRAFT' })
+  ElMessage.success('演出已下架为草稿')
+  await loadAll()
+}
+
+function openVenue(row) {
+  resetReactive(venueForm, row ? { ...emptyVenue(), ...clone(row) } : emptyVenue())
+  venueDialog.value = true
+}
+
+async function saveVenue() {
+  if (venueForm.id) await adminApi.updateVenue(venueForm.id, venueForm)
+  else await adminApi.createVenue(venueForm)
+  ElMessage.success('场馆已保存')
+  venueDialog.value = false
+  await loadAll()
+}
+
+async function disableVenue(row) {
+  await adminApi.disableVenue(row.id)
   ElMessage.success('场馆已禁用')
   await loadAll()
 }
-const createArea = async () => {
-  await adminApi.createArea(route.params.id, { areaName: '新增区域', areaType: 'SEATED', defaultTicketLevel: '标准票', color: '#d9303e' })
-  ElMessage.success('区域已新增')
-  await loadAreasForRoute()
-}
-const generateSeatTemplate = async () => {
-  previewSeats.value = await adminApi.generateSeats(seatForm.venueId, seatForm)
-  ElMessage.success(`已生成 ${previewSeats.value.length} 个座位`)
-}
-const showSeat = (seat) => ElMessage.info(`${seat.seatLabel}：${statusText(seat.status)}`)
-const createSession = async () => {
-  await adminApi.createSession({ sessionName: '新增场次', purchaseMode: 'SELECTABLE' })
-  ElMessage.success('场次已新增')
+
+async function deleteVenue(row) {
+  await ElMessageBox.confirm(`确定删除场馆「${row.name}」吗？该场馆会从后台列表移除，座位模板也会清空。`, '删除场馆', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  await adminApi.deleteVenue(row.id)
+  ElMessage.success('场馆已删除')
   await loadAll()
 }
-const initSessionSeats = async (row) => {
+
+function openArea(row) {
+  resetReactive(areaForm, row ? { ...emptyArea(), ...clone(row) } : emptyArea())
+  areaDialog.value = true
+}
+
+async function saveArea() {
+  if (areaForm.id) await adminApi.updateArea(areaForm.id, areaForm)
+  else await adminApi.createArea(route.params.id, areaForm)
+  ElMessage.success('区域已保存')
+  areaDialog.value = false
+  await loadAreasForRoute()
+  await loadAreasForSeatForm()
+}
+
+async function generateSeatTemplate() {
+  previewSeats.value = await adminApi.generateSeats(seatForm.venueId, { ...seatForm, clearExisting: true })
+  if (String(route.params.id || '') === String(seatForm.venueId)) {
+    await loadVenueSeatsForRoute()
+  }
+  ElMessage.success(`已生成 ${previewSeats.value.length} 个座位/分区`)
+}
+
+async function clearSeatTemplate(venueId) {
+  if (!venueId) return
+  await ElMessageBox.confirm('确定清空该场馆的座位图吗？清空后可重新生成。', '清空座位图', {
+    confirmButtonText: '清空',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  const result = await adminApi.clearSeats(venueId)
+  previewSeats.value = []
+  if (String(route.params.id || '') === String(venueId)) {
+    await loadVenueSeatsForRoute()
+  }
+  ElMessage.success(`已清空 ${result.deleted || 0} 个座位/场次座位`)
+}
+
+const showSeat = (seat) => ElMessage.info(`${seat.seatLabel}: ${statusText(seat.status)}`)
+
+function openSession(row) {
+  resetReactive(sessionForm, row ? { ...emptySession(), ...clone(row) } : emptySession())
+  sessionDialog.value = true
+}
+
+async function saveSession() {
+  if (sessionForm.id) await adminApi.updateSession(sessionForm.id, sessionForm)
+  else await adminApi.createSession(sessionForm)
+  ElMessage.success('场次已保存')
+  sessionDialog.value = false
+  await loadAll()
+}
+
+async function selectSessionForLevels(row) {
+  selectedSessionId.value = row.id
+  await loadTicketLevels()
+  router.push('/admin/ticket-level')
+}
+
+async function initSessionSeats(row) {
   await adminApi.initSessionSeats(row.id)
   ElMessage.success('场次座位已初始化')
 }
-const createBatch = async () => {
-  await adminApi.createSaleBatch({ sessionId: selectedSessionId.value || 1001, batchName: '新增售票批次', releaseQuantity: 50 })
-  ElMessage.success('售票批次已创建')
+
+async function loadTicketLevelAreas() {
+  const session = sessionById(ticketLevelForm.sessionId || selectedSessionId.value)
+  ticketLevelAreas.value = session?.venueId ? await adminApi.areas(session.venueId) : []
+  if (!ticketLevelForm.areaId && ticketLevelAreas.value.length) ticketLevelForm.areaId = ticketLevelAreas.value[0].id
+}
+
+async function openTicketLevel(row) {
+  resetReactive(ticketLevelForm, row ? { ...emptyTicketLevel(), ...clone(row) } : emptyTicketLevel())
+  ticketLevelForm.sessionId = ticketLevelForm.sessionId || selectedSessionId.value
+  await loadTicketLevelAreas()
+  ticketLevelDialog.value = true
+}
+
+async function saveTicketLevel() {
+  const total = Number(ticketLevelForm.totalStock || 0)
+  const released = Number(ticketLevelForm.releasedStock || 0)
+  ticketLevelForm.unreleasedStock = Math.max(0, total - released)
+  if (ticketLevelForm.id) await adminApi.updateTicketLevel(ticketLevelForm.id, ticketLevelForm)
+  else await adminApi.createTicketLevel(ticketLevelForm)
+  ElMessage.success('票档已保存')
+  ticketLevelDialog.value = false
+  await loadTicketLevels()
+}
+
+function openBatch(row) {
+  resetReactive(batchForm, row ? { ...emptyBatch(), ...clone(row) } : emptyBatch())
+  batchForm.sessionId = batchForm.sessionId || selectedSessionId.value
+  batchDialog.value = true
+}
+
+async function saveBatch() {
+  if (batchForm.id) await adminApi.updateSaleBatch(batchForm.id, batchForm)
+  else await adminApi.createSaleBatch(batchForm)
+  ElMessage.success('开售批次已保存')
+  batchDialog.value = false
   await loadAll()
 }
-const startBatch = async (row) => {
+
+async function startBatch(row) {
   await adminApi.startBatch(row.id)
   ElMessage.success('售票批次已开售')
   await loadAll()
 }
-const lockBatch = async (row) => {
+
+async function lockBatch(row) {
   await adminApi.lockBatch(row.id)
   ElMessage.success('售票批次已锁票')
   await loadAll()
 }
-const initRedis = async (row) => {
+
+async function initRedis(row) {
   await adminApi.initRedisStock(row.id)
   ElMessage.success('实时库存已初始化')
 }
-const approve = async (row) => {
+
+async function approve(row) {
   await approveRefund(row.id)
   ElMessage.success('退票审核已通过')
   await loadOperations()
 }
-const reject = async (row) => {
+
+async function reject(row) {
   await rejectRefund(row.id)
   ElMessage.success('退票申请已驳回')
   await loadOperations()
 }
-const verify = async () => {
+
+async function verify() {
   if (!ticketCode.value) {
     ElMessage.warning('请输入票号或入场码')
     return
@@ -544,18 +1380,13 @@ const verify = async () => {
   ticketCode.value = ''
   await loadOperations()
 }
-const logout = async () => {
+
+async function logout() {
   await user.logout()
   router.push('/')
 }
 
-watch(() => route.fullPath, () => {
-  loadAll()
-  loadOperations()
-})
-watch(activeSection, loadOperations)
-onMounted(() => {
-  loadAll()
-  loadOperations()
-})
+watch(() => route.fullPath, () => loadAll())
+onMounted(() => loadAll())
 </script>
+

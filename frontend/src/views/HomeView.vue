@@ -4,7 +4,7 @@
       <el-carousel height="340px" indicator-position="outside" arrow="always">
         <el-carousel-item v-for="banner in home.banners" :key="banner.title">
           <RouterLink class="hero-slide" :to="`/performances/${banner.targetId}`">
-            <img :src="banner.image" :alt="banner.title" />
+            <img :src="assetUrl(banner.image)" :alt="banner.title" />
             <div class="hero-copy">
               <p class="eyebrow">TicketMarket</p>
               <h1>{{ banner.title }}</h1>
@@ -63,7 +63,7 @@
       <SectionHeader title="电影热映" to="/category/movie" />
       <div class="movie-row">
         <RouterLink v-for="movie in home.movies" :key="movie.id" class="movie-card" :to="`/movies/${movie.id}`">
-          <img :src="movie.poster" :alt="movie.title" />
+          <img :src="assetUrl(movie.poster)" :alt="movie.title" />
           <strong>{{ movie.title }}</strong>
           <span>{{ movie.genre }}</span>
         </RouterLink>
@@ -89,6 +89,7 @@ import { ElMessage } from 'element-plus'
 import PerformanceCard from '../components/PerformanceCard.vue'
 import SectionHeader from '../components/SectionHeader.vue'
 import { getHome } from '../api/portal'
+import { assetUrl } from '../utils/assets'
 
 const home = reactive({
   banners: [],

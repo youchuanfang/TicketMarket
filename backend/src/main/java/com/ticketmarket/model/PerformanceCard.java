@@ -1,6 +1,7 @@
 package com.ticketmarket.model;
 
 import java.util.List;
+import java.util.Map;
 
 public class PerformanceCard {
     private Long id;
@@ -8,6 +9,7 @@ public class PerformanceCard {
     private String subtitle;
     private String categoryCode;
     private String categoryName;
+    private Long venueId;
     private String city;
     private String venue;
     private String address;
@@ -27,6 +29,8 @@ public class PerformanceCard {
     private String purchaseNotice;
     private String refundRule;
     private String entryRule;
+    private String publishStatus;
+    private List<Map<String, Object>> detailBlocks;
     private List<SessionOption> sessions;
     private List<TicketLevel> ticketLevels;
 
@@ -71,6 +75,14 @@ public class PerformanceCard {
 
     public void setCategoryName(String categoryName) {
         this.categoryName = categoryName;
+    }
+
+    public Long getVenueId() {
+        return venueId;
+    }
+
+    public void setVenueId(Long venueId) {
+        this.venueId = venueId;
     }
 
     public String getCity() {
@@ -223,6 +235,22 @@ public class PerformanceCard {
 
     public void setEntryRule(String entryRule) {
         this.entryRule = entryRule;
+    }
+
+    public String getPublishStatus() {
+        return publishStatus;
+    }
+
+    public void setPublishStatus(String publishStatus) {
+        this.publishStatus = publishStatus;
+    }
+
+    public List<Map<String, Object>> getDetailBlocks() {
+        return detailBlocks;
+    }
+
+    public void setDetailBlocks(List<Map<String, Object>> detailBlocks) {
+        this.detailBlocks = detailBlocks;
     }
 
     public List<SessionOption> getSessions() {

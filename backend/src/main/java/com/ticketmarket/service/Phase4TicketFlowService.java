@@ -4,7 +4,9 @@ import com.ticketmarket.common.ApiException;
 import com.ticketmarket.model.UserAccount;
 import com.ticketmarket.model.Viewer;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -20,12 +22,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
+@DependsOn("databaseSchemaInitializer")
 public class Phase4TicketFlowService {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final DemoDataService demoDataService;
     private final Phase3ResourceService resourceService;
     private final StringRedisTemplate redisTemplate;
+    private final JdbcTemplate jdbcTemplate;
     private final AtomicLong orderId = new AtomicLong(5000);
     private final AtomicLong ticketId = new AtomicLong(8000);
     private final AtomicLong paymentId = new AtomicLong(9000);
@@ -47,14 +51,20 @@ public class Phase4TicketFlowService {
     private final Map<Long, Map<String, Object>> blacklist = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> reservations = new ConcurrentHashMap<>();
 
-    public Phase4TicketFlowService(DemoDataService demoDataService, Phase3ResourceService resourceService, StringRedisTemplate redisTemplate) {
+    public Phase4TicketFlowService(DemoDataService demoDataService, Phase3ResourceService resourceService, StringRedisTemplate redisTemplate, JdbcTemplate jdbcTemplate) {
         this.demoDataService = demoDataService;
         this.resourceService = resourceService;
         this.redisTemplate = redisTemplate;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @PostConstruct
     public void initDemoRecords() {
+        Integer persistedOrders = jdbcTemplate.queryForObject("select count(*) from ticket_order where deleted = 0", Integer.class);
+        if (persistedOrders != null && persistedOrders > 0) {
+            loadPersistentRecords();
+            return;
+        }
         Long id = orderId.incrementAndGet();
         Map<String, Object> order = map(
                 "id", id,
@@ -74,6 +84,7 @@ public class Phase4TicketFlowService {
                 "updatedAt", now()
         );
         orders.put(id, order);
+        persistOrder(order);
         Long sampleTicketId = ticketId.incrementAndGet();
         tickets.put(sampleTicketId, map(
                 "id", sampleTicketId,
@@ -88,6 +99,7 @@ public class Phase4TicketFlowService {
                 "status", "UNUSED",
                 "createdAt", now()
         ));
+        persistTicket(tickets.get(sampleTicketId));
         refunds.put(refundId.incrementAndGet(), map(
                 "id", refundId.get(),
                 "orderId", id,
@@ -99,6 +111,7 @@ public class Phase4TicketFlowService {
                 "createdAt", now(),
                 "updatedAt", now()
         ));
+        persistRefund(refunds.get(refundId.get()));
         checkins.put(checkinId.incrementAndGet(), map(
                 "id", checkinId.get(),
                 "ticketId", sampleTicketId,
@@ -108,6 +121,7 @@ public class Phase4TicketFlowService {
                 "message", "核验成功",
                 "createdAt", now()
         ));
+        persistCheckin(checkins.get(checkinId.get()));
         addMessage(6L, "出票成功", "演示订单已出票，可在票夹查看。");
         log("演示数据", "初始化演示订单和电子票", 6L);
         risk("风控", "演示风控日志，可用于后台查看", null);
@@ -309,6 +323,7 @@ public class Phase4TicketFlowService {
         }
         order.put("status", "CANCELLED");
         order.put("updatedAt", now());
+        updateOrder(order);
         returnStock(order);
         resourceService.releaseSessionSeats(longList(order.get("selectedSeatIds")), userId);
         return copy(order);
@@ -328,6 +343,7 @@ public class Phase4TicketFlowService {
         order.put("status", "PAID");
         order.put("paidAt", now());
         order.put("updatedAt", now());
+        updateOrder(order);
         Map<String, Object> payment = map(
                 "id", paymentId.incrementAndGet(),
                 "orderId", orderId,
@@ -338,9 +354,11 @@ public class Phase4TicketFlowService {
                 "createdAt", now()
         );
         payments.put((Long) payment.get("id"), payment);
+        persistPayment(payment);
         issueTickets(order);
         order.put("status", "TICKET_ISSUED");
         order.put("updatedAt", now());
+        updateOrder(order);
         resourceService.markSessionSeatsSold(longList(order.get("selectedSeatIds")), userId);
         resourceService.increaseTicketLevelSold((Long) order.get("ticketLevelId"), intValue(order, "quantity", 1));
         addMessage(userId, "出票成功", "订单 " + order.get("orderNo") + " 已完成出票，可在票夹查看。");
@@ -410,6 +428,8 @@ public class Phase4TicketFlowService {
         refunds.put((Long) refund.get("id"), refund);
         order.put("status", "REFUND_APPLYING");
         order.put("updatedAt", now());
+        persistRefund(refund);
+        updateOrder(order);
         addMessage(userId, "退票申请已提交", "订单 " + order.get("orderNo") + " 已提交退票申请，请等待审核。");
         log("退票", "用户提交退票申请，订单号：" + order.get("orderNo"), userId);
         return copy(refund);
@@ -431,12 +451,17 @@ public class Phase4TicketFlowService {
         refund.put("status", "APPROVED");
         refund.put("message", "退票审核通过");
         refund.put("updatedAt", now());
+        updateRefund(refund);
         Map<String, Object> order = orders.get((Long) refund.get("orderId"));
         order.put("status", "REFUNDED");
         order.put("updatedAt", now());
+        updateOrder(order);
         tickets.values().stream()
                 .filter(item -> Objects.equals(item.get("orderId"), order.get("id")))
-                .forEach(item -> item.put("status", "REFUNDED"));
+                .forEach(item -> {
+                    item.put("status", "REFUNDED");
+                    updateTicket(item);
+                });
         returnStock(order);
         addMessage((Long) order.get("userId"), "退票审核通过", "订单 " + order.get("orderNo") + " 已完成退票处理。");
         log("退票审核", "退票审核通过，订单号：" + order.get("orderNo"), (Long) order.get("userId"));
@@ -451,9 +476,11 @@ public class Phase4TicketFlowService {
         refund.put("status", "REJECTED");
         refund.put("message", "退票申请未通过");
         refund.put("updatedAt", now());
+        updateRefund(refund);
         Map<String, Object> order = orders.get((Long) refund.get("orderId"));
         order.put("status", "TICKET_ISSUED");
         order.put("updatedAt", now());
+        updateOrder(order);
         addMessage((Long) order.get("userId"), "退票申请未通过", "订单 " + order.get("orderNo") + " 暂不符合退票条件。");
         log("退票审核", "退票申请未通过，订单号：" + order.get("orderNo"), (Long) order.get("userId"));
         return copy(refund);
@@ -476,10 +503,12 @@ public class Phase4TicketFlowService {
             return checkinResult(code, "DUPLICATE", "重复入场");
         }
         ticket.put("status", "CHECKED_IN");
+        updateTicket(ticket);
         Map<String, Object> order = orders.get((Long) ticket.get("orderId"));
         if (order != null) {
             order.put("status", "CHECKED_IN");
             order.put("updatedAt", now());
+            updateOrder(order);
         }
         Map<String, Object> record = map(
                 "id", checkinId.incrementAndGet(),
@@ -491,6 +520,7 @@ public class Phase4TicketFlowService {
                 "createdAt", now()
         );
         checkins.put((Long) record.get("id"), record);
+        persistCheckin(record);
         addMessage((Long) ticket.get("userId"), "电子票已核验", "票号 " + ticket.get("ticketNo") + " 已完成入场核验。");
         log("检票", "核验成功，票号：" + ticket.get("ticketNo"), checkerId);
         return copy(record);
@@ -661,6 +691,224 @@ public class Phase4TicketFlowService {
         riskLogs.put((Long) row.get("id"), row);
     }
 
+    private void loadPersistentRecords() {
+        orders.clear();
+        tickets.clear();
+        refunds.clear();
+        payments.clear();
+        checkins.clear();
+        jdbcTemplate.query("""
+                select id, order_no orderNo, user_id userId, session_id sessionId, sale_batch_id batchId,
+                       total_amount totalAmount, status, pay_deadline expireTime, paid_at paidAt,
+                       date_format(created_at, '%Y-%m-%d %H:%i:%s') createdAt,
+                       date_format(updated_at, '%Y-%m-%d %H:%i:%s') updatedAt
+                from ticket_order where deleted = 0
+                """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+            Long id = rs.getLong("id");
+            List<Map<String, Object>> items = jdbcTemplate.queryForList("""
+                    select ticket_level_id ticketLevelId, session_seat_id seatId, viewer_id viewerId, price
+                    from order_item where order_id = ?
+                    """, id);
+            Long ticketLevelId = items.isEmpty() ? null : longValue(items.get(0), "ticketLevelId", null);
+            Map<String, Object> level = ticketLevelId == null ? Map.of("name", "") : resourceService.ticketLevel(ticketLevelId);
+            orders.put(id, map(
+                    "id", id,
+                    "orderNo", rs.getString("orderNo"),
+                    "userId", rs.getLong("userId"),
+                    "sessionId", rs.getLong("sessionId"),
+                    "batchId", rs.getLong("batchId"),
+                    "ticketLevelId", ticketLevelId,
+                    "ticketLevelName", level.get("name"),
+                    "quantity", items.size(),
+                    "viewerIds", items.stream().map(item -> longValue(item, "viewerId", null)).filter(Objects::nonNull).toList(),
+                    "selectedSeatIds", items.stream().map(item -> longValue(item, "seatId", null)).filter(Objects::nonNull).toList(),
+                    "status", rs.getString("status"),
+                    "totalAmount", rs.getBigDecimal("totalAmount"),
+                    "expireTime", format(rs.getTimestamp("expireTime")),
+                    "paidAt", format(rs.getTimestamp("paidAt")),
+                    "createdAt", rs.getString("createdAt"),
+                    "updatedAt", rs.getString("updatedAt")
+            ));
+        });
+        jdbcTemplate.query("""
+                select id, payment_no paymentNo, order_id orderId, user_id userId, channel payMethod, amount, status,
+                       date_format(created_at, '%Y-%m-%d %H:%i:%s') createdAt
+                from payment_record
+                """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> payments.put(rs.getLong("id"), map(
+                "id", rs.getLong("id"),
+                "paymentNo", rs.getString("paymentNo"),
+                "orderId", rs.getLong("orderId"),
+                "userId", rs.getLong("userId"),
+                "payMethod", rs.getString("payMethod"),
+                "amount", rs.getBigDecimal("amount"),
+                "status", rs.getString("status"),
+                "createdAt", rs.getString("createdAt")
+        )));
+        jdbcTemplate.query("""
+                select id, ticket_no ticketNo, qr_payload qrCodeContent, order_id orderId, user_id userId,
+                       viewer_id viewerId, session_id sessionId, ticket_level_id ticketLevelId,
+                       session_seat_id seatId, status, date_format(created_at, '%Y-%m-%d %H:%i:%s') createdAt
+                from e_ticket
+                """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> tickets.put(rs.getLong("id"), map(
+                "id", rs.getLong("id"),
+                "ticketNo", rs.getString("ticketNo"),
+                "qrCodeContent", rs.getString("qrCodeContent"),
+                "orderId", rs.getLong("orderId"),
+                "userId", rs.getLong("userId"),
+                "viewerId", nullableLong(rs.getObject("viewerId")),
+                "sessionId", rs.getLong("sessionId"),
+                "ticketLevelId", rs.getLong("ticketLevelId"),
+                "seatId", nullableLong(rs.getObject("seatId")),
+                "status", rs.getString("status"),
+                "createdAt", rs.getString("createdAt")
+        )));
+        jdbcTemplate.query("""
+                select ra.id, ra.order_id orderId, ra.user_id userId, rr.amount, ra.status, ra.reason message,
+                       date_format(ra.created_at, '%Y-%m-%d %H:%i:%s') createdAt,
+                       date_format(ra.updated_at, '%Y-%m-%d %H:%i:%s') updatedAt
+                from refund_apply ra
+                left join refund_record rr on rr.refund_apply_id = ra.id
+                """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> refunds.put(rs.getLong("id"), map(
+                "id", rs.getLong("id"),
+                "orderId", rs.getLong("orderId"),
+                "userId", rs.getLong("userId"),
+                "amount", rs.getBigDecimal("amount"),
+                "feeRate", "0%",
+                "status", rs.getString("status"),
+                "message", rs.getString("message"),
+                "createdAt", rs.getString("createdAt"),
+                "updatedAt", rs.getString("updatedAt")
+        )));
+        jdbcTemplate.query("""
+                select cr.id, cr.ticket_id ticketId, et.ticket_no ticketNo, cr.checker_id checkerId, cr.result, cr.message,
+                       date_format(cr.created_at, '%Y-%m-%d %H:%i:%s') createdAt
+                from checkin_record cr
+                left join e_ticket et on et.id = cr.ticket_id
+                """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> checkins.put(rs.getLong("id"), map(
+                "id", rs.getLong("id"),
+                "ticketId", rs.getLong("ticketId"),
+                "ticketNo", rs.getString("ticketNo"),
+                "checkerId", rs.getLong("checkerId"),
+                "result", rs.getString("result"),
+                "message", rs.getString("message"),
+                "createdAt", rs.getString("createdAt")
+        )));
+        resetIds();
+    }
+
+    private void persistOrder(Map<String, Object> order) {
+        jdbcTemplate.update("""
+                insert into ticket_order
+                (id, order_no, user_id, session_id, sale_batch_id, total_amount, status, pay_deadline, paid_at, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now(), 0)
+                on duplicate key update status=values(status), total_amount=values(total_amount), pay_deadline=values(pay_deadline),
+                                        paid_at=values(paid_at), updated_at=now()
+                """,
+                order.get("id"), order.get("orderNo"), order.get("userId"), order.get("sessionId"), order.get("batchId"),
+                order.get("totalAmount"), order.get("status"), timestamp(order.get("expireTime")), timestamp(order.get("paidAt"))
+        );
+        jdbcTemplate.update("delete from order_item where order_id=?", order.get("id"));
+        List<Long> viewerIds = longList(order.get("viewerIds"));
+        List<Long> seatIds = longList(order.get("selectedSeatIds"));
+        for (int i = 0; i < intValue(order, "quantity", viewerIds.size()); i++) {
+            jdbcTemplate.update("""
+                    insert into order_item (order_id, ticket_level_id, session_seat_id, viewer_id, price, created_at, updated_at)
+                    values (?, ?, ?, ?, ?, now(), now())
+                    """,
+                    order.get("id"), order.get("ticketLevelId"), i < seatIds.size() ? seatIds.get(i) : null,
+                    i < viewerIds.size() ? viewerIds.get(i) : null,
+                    new BigDecimal(String.valueOf(order.get("totalAmount"))).divide(BigDecimal.valueOf(Math.max(1, intValue(order, "quantity", 1))))
+            );
+        }
+    }
+
+    private void updateOrder(Map<String, Object> order) {
+        jdbcTemplate.update("""
+                update ticket_order set status=?, paid_at=?, updated_at=now()
+                where id=? and deleted=0
+                """, order.get("status"), timestamp(order.get("paidAt")), order.get("id"));
+    }
+
+    private void persistPayment(Map<String, Object> payment) {
+        jdbcTemplate.update("""
+                insert into payment_record (id, payment_no, order_id, user_id, channel, amount, status, created_at, updated_at)
+                values (?, ?, ?, ?, ?, ?, ?, now(), now())
+                on duplicate key update status=values(status), updated_at=now()
+                """,
+                payment.get("id"), "PAY" + payment.get("id"), payment.get("orderId"), payment.get("userId"),
+                payment.get("payMethod"), payment.get("amount"), payment.get("status")
+        );
+    }
+
+    private void persistTicket(Map<String, Object> ticket) {
+        jdbcTemplate.update("""
+                insert into e_ticket
+                (id, ticket_no, order_id, order_item_id, user_id, viewer_id, session_id, ticket_level_id, session_seat_id, qr_payload, status, created_at, updated_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
+                on duplicate key update status=values(status), updated_at=now()
+                """,
+                ticket.get("id"), ticket.get("ticketNo"), ticket.get("orderId"), ticket.get("id"), ticket.get("userId"),
+                ticket.get("viewerId"), ticket.get("sessionId"), ticket.get("ticketLevelId"), ticket.get("seatId"),
+                ticket.get("qrCodeContent"), ticket.get("status")
+        );
+    }
+
+    private void updateTicket(Map<String, Object> ticket) {
+        jdbcTemplate.update("update e_ticket set status=?, updated_at=now() where id=?", ticket.get("status"), ticket.get("id"));
+    }
+
+    private void persistRefund(Map<String, Object> refund) {
+        jdbcTemplate.update("""
+                insert into refund_apply (id, apply_no, order_id, user_id, reason, status, created_at, updated_at)
+                values (?, ?, ?, ?, ?, ?, now(), now())
+                on duplicate key update status=values(status), reason=values(reason), updated_at=now()
+                """,
+                refund.get("id"), "RF" + refund.get("id"), refund.get("orderId"), refund.get("userId"),
+                refund.get("message"), refund.get("status")
+        );
+        Integer count = jdbcTemplate.queryForObject("select count(*) from refund_record where refund_apply_id=?", Integer.class, refund.get("id"));
+        if (count == null || count == 0) {
+            jdbcTemplate.update("""
+                    insert into refund_record (refund_apply_id, order_id, amount, fee_amount, status, created_at, updated_at)
+                    values (?, ?, ?, 0, ?, now(), now())
+                    """, refund.get("id"), refund.get("orderId"), refund.get("amount"), refund.get("status"));
+        } else {
+            jdbcTemplate.update("update refund_record set status=?, updated_at=now() where refund_apply_id=?", refund.get("status"), refund.get("id"));
+        }
+    }
+
+    private void updateRefund(Map<String, Object> refund) {
+        jdbcTemplate.update("update refund_apply set status=?, reason=?, updated_at=now() where id=?", refund.get("status"), refund.get("message"), refund.get("id"));
+        jdbcTemplate.update("update refund_record set status=?, updated_at=now() where refund_apply_id=?", refund.get("status"), refund.get("id"));
+    }
+
+    private void persistCheckin(Map<String, Object> record) {
+        Object ticketIdValue = record.get("ticketId");
+        if (ticketIdValue == null) return;
+        Map<String, Object> ticket = tickets.get(Long.valueOf(String.valueOf(ticketIdValue)));
+        jdbcTemplate.update("""
+                insert into checkin_record (id, ticket_id, checker_id, session_id, result, message, created_at, updated_at)
+                values (?, ?, ?, ?, ?, ?, now(), now())
+                on duplicate key update result=values(result), message=values(message), updated_at=now()
+                """,
+                record.get("id"), ticketIdValue, record.get("checkerId"), ticket == null ? null : ticket.get("sessionId"),
+                record.get("result"), record.get("message")
+        );
+    }
+
+    private void resetIds() {
+        orderId.set(maxId("ticket_order", 5000L));
+        ticketId.set(maxId("e_ticket", 8000L));
+        paymentId.set(maxId("payment_record", 9000L));
+        refundId.set(maxId("refund_apply", 10000L));
+        checkinId.set(maxId("checkin_record", 11000L));
+    }
+
+    private Long maxId(String table, Long fallback) {
+        Long value = jdbcTemplate.queryForObject("select coalesce(max(id), ?) from " + table, Long.class, fallback);
+        return value == null ? fallback : value;
+    }
+
     private String successRate() {
         long success = rushRequests.values().stream().filter(item -> "SUCCESS".equals(item.get("status"))).count();
         return Math.round(success * 1000.0 / rushRequests.size()) / 10.0 + "%";
@@ -689,6 +937,7 @@ public class Phase4TicketFlowService {
                 "updatedAt", now()
         );
         orders.put(id, order);
+        persistOrder(order);
         return copy(order);
     }
 
@@ -717,6 +966,7 @@ public class Phase4TicketFlowService {
                     "createdAt", now()
             );
             tickets.put(id, ticket);
+            persistTicket(ticket);
         }
     }
 
@@ -782,6 +1032,21 @@ public class Phase4TicketFlowService {
 
     private String now() {
         return FORMATTER.format(LocalDateTime.now());
+    }
+
+    private String format(java.sql.Timestamp timestamp) {
+        return timestamp == null ? null : FORMATTER.format(timestamp.toLocalDateTime());
+    }
+
+    private java.sql.Timestamp timestamp(Object value) {
+        if (value == null || String.valueOf(value).isBlank()) {
+            return null;
+        }
+        return java.sql.Timestamp.valueOf(LocalDateTime.parse(String.valueOf(value), FORMATTER));
+    }
+
+    private Long nullableLong(Object value) {
+        return value == null ? null : Long.valueOf(String.valueOf(value));
     }
 
     private Map<String, Object> copy(Map<String, Object> source) {

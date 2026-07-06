@@ -1,6 +1,6 @@
 <template>
   <RouterLink class="event-card" :to="`/performances/${item.id}`">
-    <img :src="item.poster" :alt="item.title" class="event-poster" />
+    <img :src="assetUrl(item.poster)" :alt="item.title" class="event-poster" />
     <div class="event-body">
       <div class="event-status" :class="item.saleStatus">{{ statusText }}</div>
       <h3>{{ item.title }}</h3>
@@ -16,6 +16,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { assetUrl } from '../utils/assets'
 
 const props = defineProps({
   item: {
