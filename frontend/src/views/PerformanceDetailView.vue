@@ -61,7 +61,8 @@
       <el-tabs>
         <el-tab-pane label="项目详情">
           <div class="rich-detail">
-            <template v-if="detailBlocks.length">
+            <div v-if="detail.detailContent" class="rich-detail-content" v-html="detailHtml"></div>
+            <template v-else-if="detailBlocks.length">
               <template v-for="(block, index) in detailBlocks" :key="index">
                 <h2 v-if="block.type === 'HEADING'">{{ block.content }}</h2>
                 <img v-else-if="block.type === 'IMAGE'" :src="assetUrl(block.content)" :alt="block.alt || detail.title" />
@@ -79,7 +80,24 @@
             </template>
           </div>
         </el-tab-pane>
-        <el-tab-pane label="购票须知"><p>{{ detail.purchaseNotice }}</p><p>{{ detail.refundRule }}</p></el-tab-pane>
+        <el-tab-pane label="购票须知">
+          <p>{{ detail.purchaseNotice }}</p>
+          <table v-if="refundRows.length" class="refund-table">
+            <thead>
+              <tr>
+                <th>申请退票时间段</th>
+                <th>退票手续费</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in refundRows" :key="row.period">
+                <td>{{ row.period }}</td>
+                <td>{{ row.fee }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else>{{ detail.refundRule }}</p>
+        </el-tab-pane>
         <el-tab-pane label="观演须知"><p>{{ detail.entryRule }}</p></el-tab-pane>
       </el-tabs>
     </section>
@@ -120,7 +138,17 @@ const modeMap = {
 const statusText = computed(() => statusMap[selectedSaleStatus.value.status] || statusMap[detail.value?.saleStatus] || '')
 const modeText = computed(() => modeMap[detail.value?.saleMode] || '')
 const detailBlocks = computed(() => detail.value?.detailBlocks || [])
+const detailHtml = computed(() => rewriteImageSources(detail.value?.detailContent || ''))
 const modeLabel = (mode) => modeMap[mode] || mode
+const refundRows = computed(() => {
+  if (!detail.value?.refundFreeUntil || !detail.value?.refundFeeUntil || !detail.value?.refundStopTime) return []
+  const saleStart = selectedSaleStatus.value.saleStartTime || selectedSession.value?.saleStartTime || detail.value.startTime
+  return [
+    { period: `${saleStart} 至 ${detail.value.refundFreeUntil}`, fee: '无手续费' },
+    { period: `${detail.value.refundFeeUntil} 至 ${detail.value.refundStopTime}`, fee: '票价20%' },
+    { period: `${detail.value.refundStopTime} 之后`, fee: '停止退票' }
+  ]
+})
 const actionText = computed(() => selectedSaleStatus.value.buttonText || '请选择场次')
 const buyDisabled = computed(() => !selectedSaleStatus.value.clickable)
 const saleStatusDescription = computed(() => {
@@ -155,6 +183,8 @@ const buyNow = () => {
     router.push(`/performance/${detail.value.id}/purchase?sessionId=${selectedSession.value.id}`)
   }
 }
+
+const rewriteImageSources = (html) => String(html || '').replace(/src="([^"]+)"/g, (_, src) => `src="${assetUrl(src)}"`)
 
 onMounted(async () => {
   try {

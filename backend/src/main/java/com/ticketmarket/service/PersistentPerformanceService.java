@@ -116,7 +116,8 @@ public class PersistentPerformanceService {
                   title=?, subtitle=?, category_id=?, category_name=?, city_id=?, city_name=?,
                   venue_id=?, venue_name=?, address=?, poster_path=?, banner_path=?, detail_image_path=?,
                   price_min=?, price_max=?, summary=?, introduction=?, detail_content=?, artist_intro=?,
-                  venue_intro=?, purchase_notice=?, refund_notice=?, entry_notice=?, service_tags=?,
+                  venue_intro=?, purchase_notice=?, refund_notice=?, refund_free_until=?, refund_fee_until=?,
+                  refund_stop_time=?, entry_notice=?, service_tags=?,
                   purchase_mode=?, publish_status=?, status=?, home_recommended=?, home_sort=?, start_time=?, updated_at=now()
                 where id=? and deleted=0
                 """,
@@ -141,6 +142,9 @@ public class PersistentPerformanceService {
                 str(payload, "venueIntro", ""),
                 str(payload, "purchaseNotice", ""),
                 str(payload, "refundRule", str(payload, "refundNotice", "")),
+                timeFromText(str(payload, "refundFreeUntil", "")),
+                timeFromText(str(payload, "refundFeeUntil", "")),
+                timeFromText(str(payload, "refundStopTime", "")),
                 str(payload, "entryRule", str(payload, "entryNotice", "")),
                 serviceTags(payload.get("tags"), str(payload, "tagsText", str(payload, "serviceTags", ""))),
                 str(payload, "saleMode", str(payload, "purchaseMode", "SELECTABLE")),
@@ -249,9 +253,10 @@ public class PersistentPerformanceService {
                 insert into performance
                 (title, subtitle, category_id, category_name, city_id, city_name, venue_id, venue_name, address,
                  poster_path, banner_path, detail_image_path, price_min, price_max, summary, introduction,
-                 detail_content, artist_intro, venue_intro, purchase_notice, refund_notice, entry_notice,
+                 detail_content, artist_intro, venue_intro, purchase_notice, refund_notice, refund_free_until,
+                 refund_fee_until, refund_stop_time, entry_notice,
                  service_tags, purchase_mode, publish_status, status, home_recommended, home_sort, start_time, created_at, updated_at, deleted)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now(), 0)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now(), 0)
                 """,
                 str(payload, "title", "未命名演出"),
                 str(payload, "subtitle", ""),
@@ -274,6 +279,9 @@ public class PersistentPerformanceService {
                 str(payload, "venueIntro", ""),
                 str(payload, "purchaseNotice", ""),
                 str(payload, "refundRule", str(payload, "refundNotice", "")),
+                timeFromText(str(payload, "refundFreeUntil", "")),
+                timeFromText(str(payload, "refundFeeUntil", "")),
+                timeFromText(str(payload, "refundStopTime", "")),
                 str(payload, "entryRule", str(payload, "entryNotice", "")),
                 serviceTags(payload.get("tags"), str(payload, "tagsText", str(payload, "serviceTags", ""))),
                 str(payload, "saleMode", str(payload, "purchaseMode", "SELECTABLE")),
@@ -597,10 +605,14 @@ public class PersistentPerformanceService {
         card.setTags(splitTags(rs.getString("service_tags")));
         card.setSummary(rs.getString("summary"));
         card.setIntro(rs.getString("introduction"));
+        card.setDetailContent(rs.getString("detail_content"));
         card.setArtistInfo(rs.getString("artist_intro"));
         card.setVenueIntro(rs.getString("venue_intro"));
         card.setPurchaseNotice(rs.getString("purchase_notice"));
         card.setRefundRule(rs.getString("refund_notice"));
+        card.setRefundFreeUntil(format(rs.getTimestamp("refund_free_until")));
+        card.setRefundFeeUntil(format(rs.getTimestamp("refund_fee_until")));
+        card.setRefundStopTime(format(rs.getTimestamp("refund_stop_time")));
         card.setEntryRule(rs.getString("entry_notice"));
         card.setTicketLevels(List.of(new TicketLevel(card.getId() * 1000 + 1, "标准票", "", card.getPriceMin(), 0)));
         return card;
@@ -671,10 +683,14 @@ public class PersistentPerformanceService {
                 "tags", card.getTags(),
                 "summary", card.getSummary(),
                 "intro", card.getIntro(),
+                "detailContent", card.getDetailContent(),
                 "artistInfo", card.getArtistInfo(),
                 "venueIntro", card.getVenueIntro(),
                 "purchaseNotice", card.getPurchaseNotice(),
                 "refundRule", card.getRefundRule(),
+                "refundFreeUntil", card.getRefundFreeUntil(),
+                "refundFeeUntil", card.getRefundFeeUntil(),
+                "refundStopTime", card.getRefundStopTime(),
                 "entryRule", card.getEntryRule()
         );
     }
