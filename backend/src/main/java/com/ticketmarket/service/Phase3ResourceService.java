@@ -717,11 +717,20 @@ public class Phase3ResourceService {
     }
 
     public void assertSeatSelectionOpen(Long sessionId, Long batchId) {
+        if (isMovieSession(sessionId)) return;
         try {
             assertFrontSaleOpen(sessionId, batchId);
         } catch (ApiException ex) {
             throw new ApiException(ex.getCode(), "当前场次暂未开放选座，可先预约抢票");
         }
+    }
+
+    public boolean isMovieSession(Long sessionId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                select count(*) from performance_session
+                where id=? and movie_id is not null and deleted=0
+                """, Integer.class, sessionId);
+        return count != null && count > 0;
     }
 
     public Map<String, Object> initRedisStock(Long batchId) {

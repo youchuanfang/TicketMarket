@@ -6,6 +6,7 @@ import com.ticketmarket.model.PerformanceCard;
 import com.ticketmarket.service.PersistentMovieService;
 import com.ticketmarket.service.PersistentPerformanceService;
 import com.ticketmarket.service.Phase3ResourceService;
+import com.ticketmarket.service.HomepageRecommendationService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,11 +33,13 @@ public class Phase3AdminController {
     private final Phase3ResourceService service;
     private final PersistentPerformanceService performanceService;
     private final PersistentMovieService movieService;
+    private final HomepageRecommendationService homepageRecommendationService;
 
-    public Phase3AdminController(Phase3ResourceService service, PersistentPerformanceService performanceService, PersistentMovieService movieService) {
+    public Phase3AdminController(Phase3ResourceService service, PersistentPerformanceService performanceService, PersistentMovieService movieService, HomepageRecommendationService homepageRecommendationService) {
         this.service = service;
         this.performanceService = performanceService;
         this.movieService = movieService;
+        this.homepageRecommendationService = homepageRecommendationService;
     }
 
     @GetMapping("/performances")
@@ -98,6 +101,37 @@ public class Phase3AdminController {
     @DeleteMapping("/movies/{id}")
     public Result<Void> deleteMovie(@PathVariable Long id) {
         movieService.deleteMovie(id);
+        return Result.ok();
+    }
+
+    @GetMapping("/homepage-recommendations")
+    public Result<Map<String, Object>> homepageRecommendations() {
+        return Result.ok(homepageRecommendationService.adminModel());
+    }
+
+    @PutMapping("/homepage-recommendations/{sectionCode}")
+    public Result<Map<String, Object>> saveHomepageRecommendation(@PathVariable String sectionCode, @RequestBody Map<String, Object> payload) {
+        return Result.ok(homepageRecommendationService.saveSection(sectionCode, payload));
+    }
+
+    @GetMapping("/cinemas")
+    public Result<List<Map<String, Object>>> cinemas() {
+        return Result.ok(movieService.adminCinemas());
+    }
+
+    @PostMapping("/cinemas")
+    public Result<Map<String, Object>> createCinema(@RequestBody Map<String, Object> payload) {
+        return Result.ok(movieService.createCinema(payload));
+    }
+
+    @PutMapping("/cinemas/{id}")
+    public Result<Map<String, Object>> updateCinema(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return Result.ok(movieService.updateCinema(id, payload));
+    }
+
+    @DeleteMapping("/cinemas/{id}")
+    public Result<Void> deleteCinema(@PathVariable Long id) {
+        movieService.deleteCinema(id);
         return Result.ok();
     }
 

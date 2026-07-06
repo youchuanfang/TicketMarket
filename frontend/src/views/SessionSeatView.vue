@@ -36,8 +36,10 @@
           <span>合计</span>
           <strong>¥{{ totalPrice }}</strong>
         </div>
-        <el-button type="primary" size="large" :disabled="!selectedSeats.length" :loading="submitting" @click="submit">确认选座</el-button>
-        <p class="seat-tip">确认后将进入抢票队列，请在成功后及时完成支付。</p>
+        <el-button type="primary" size="large" :disabled="!selectedSeats.length" :loading="submitting" @click="submit">
+          {{ selectedSeats.length ? `¥${totalPrice} 立即购票` : '请先选座' }}
+        </el-button>
+        <p class="seat-tip">确认后将生成待支付订单，请在成功后及时完成支付。</p>
       </aside>
     </section>
   </div>
@@ -112,7 +114,8 @@ const submit = async () => {
       viewerIds: viewerIds.value,
       selectedSeatIds: selectedIds.value
     })
-    router.push(`/rush/queue/${request.requestId}`)
+    if (route.query.movie) router.push(`/payment/${request.orderId}`)
+    else router.push(`/rush/queue/${request.requestId}`)
   } finally {
     submitting.value = false
   }
