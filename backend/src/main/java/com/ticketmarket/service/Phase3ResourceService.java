@@ -662,18 +662,31 @@ public class Phase3ResourceService {
     public Map<String, Object> frontSaleStatus(Long sessionId) {
         refreshBatchStatus();
         Map<String, Object> batch = frontBatch(sessionId);
-        if (batch == null) return map("status", "ENDED", "buttonText", "暂无可售", "clickable", false, "hasStock", false);
+        if (batch == null) return map("status", "ENDED", "buttonText", "已结束", "clickable", false, "hasStock", false);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime saleStart = parseTime(String.valueOf(batch.get("saleStartTime")));
         LocalDateTime lockTime = parseTime(String.valueOf(batch.get("lockTime")));
         boolean hasStock = hasFrontStock(batch);
-        if (now.isBefore(saleStart)) return frontStatus(batch, "RESERVABLE", "预约抢票", true, hasStock);
+        if (now.isBefore(saleStart)) return frontStatus(batch, "COMING_SOON", "预约抢票", true, hasStock);
         if (!now.isBefore(lockTime) || "LOCKED".equals(batch.get("status"))) {
             boolean hasNext = hasFutureBatch(sessionId, now);
-            return frontStatus(batch, hasNext ? "RESERVABLE" : "ENDED", hasNext ? "预约抢票" : "已结束", hasNext, false);
+            return frontStatus(batch, hasNext ? "COMING_SOON" : "ENDED", hasNext ? "预约抢票" : "已结束", hasNext, false);
         }
-        if (!hasStock) return frontStatus(batch, "SOLD_OUT", "缺货中", false, false);
+        if (!hasStock) return frontStatus(batch, "SOLD_OUT", "已售罄", false, false);
         return frontStatus(batch, "ON_SALE", "立即购票", true, true);
+    }
+
+    public Map<String, Object> frontPerformanceStatus(Long performanceId) {
+        List<Map<String, Object>> sessionStatuses = sessionsByPerformance(performanceId).stream()
+                .map(session -> frontSaleStatus((Long) session.get("id")))
+                .toList();
+        if (sessionStatuses.isEmpty()) {
+            return map("status", "COMING_SOON", "frontStatus", "COMING_SOON", "buttonText", "预约抢票", "clickable", false, "hasStock", false);
+        }
+        return sessionStatuses.stream().filter(status -> "ON_SALE".equals(status.get("status"))).findFirst()
+                .or(() -> sessionStatuses.stream().filter(status -> "COMING_SOON".equals(status.get("status"))).findFirst())
+                .or(() -> sessionStatuses.stream().filter(status -> "SOLD_OUT".equals(status.get("status"))).findFirst())
+                .orElse(sessionStatuses.get(0));
     }
 
     public void assertFrontSaleOpen(Long sessionId, Long batchId) {
@@ -971,7 +984,7 @@ public class Phase3ResourceService {
     }
 
     private String ticketLevelFrontStatus(Map<String, Object> level, String saleStatus) {
-        if ("RESERVABLE".equals(saleStatus)) return "暂未开售";
+        if ("COMING_SOON".equals(saleStatus)) return "暂未开售";
         if (!"ON_SALE".equals(saleStatus)) return "不可售";
         int stock = stockFor((Long) frontSaleStatus((Long) level.get("sessionId")).get("batchId"), level);
         if (stock <= 0) return "缺货";

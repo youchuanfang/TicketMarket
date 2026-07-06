@@ -142,6 +142,9 @@ public class Phase4TicketFlowService {
         try {
             resourceService.assertFrontSaleOpen(sessionId, (Long) batch.get("id"));
         } catch (ApiException ex) {
+            if ("SOLD_OUT".equals(resourceService.frontSaleStatus(sessionId).get("status"))) {
+                return failedRush(userId, payload, "SOLD_OUT", "本轮票源已售罄");
+            }
             return failedRush(userId, payload, "NOT_STARTED", "当前场次暂未开放购票，可先预约抢票");
         }
         String batchStatus = String.valueOf(batch.get("status"));
@@ -267,10 +270,15 @@ public class Phase4TicketFlowService {
         if ("ON_SALE".equals(status.get("status"))) {
             throw new ApiException(409, "当前场次已开售，请直接购票");
         }
+        if (!"COMING_SOON".equals(status.get("status"))) {
+            throw new ApiException(409, "当前场次不可预约");
+        }
+        Long performanceId = (Long) resourceService.session(sessionId).get("performanceId");
         Long id = reservationId.incrementAndGet();
         Map<String, Object> reservation = map(
                 "id", id,
                 "userId", userId,
+                "performanceId", performanceId,
                 "sessionId", sessionId,
                 "batchId", status.get("batchId"),
                 "ticketLevelId", ticketLevelId,
@@ -282,9 +290,62 @@ public class Phase4TicketFlowService {
                 "updatedAt", now()
         );
         reservations.put(id, reservation);
+        persistReservation(reservation);
         addMessage(userId, "预约抢票已提交", "开售前我们会保留你的预约信息，请在开售后回到项目页完成购票。");
         log("预约抢票", "用户提交预约提醒，场次：" + sessionId, userId);
         return copy(reservation);
+    }
+
+    public Map<String, Object> latestReservation(Long userId, Long performanceId) {
+        List<Map<String, Object>> persisted = jdbcTemplate.queryForList("""
+                select id, user_id userId, performance_id performanceId, session_id sessionId, batch_id batchId,
+                       ticket_level_id ticketLevelId, quantity, viewer_ids viewerIds, status,
+                       date_format(created_at, '%Y-%m-%d %H:%i:%s') createdAt,
+                       date_format(updated_at, '%Y-%m-%d %H:%i:%s') updatedAt
+                from reservation_remind
+                where user_id=? and status='RESERVED' and (? is null or performance_id=?)
+                order by updated_at desc, id desc
+                limit 1
+                """, userId, performanceId, performanceId);
+        if (!persisted.isEmpty()) return reservationPayload(persisted.get(0));
+        return reservations.values().stream()
+                .filter(item -> Objects.equals(item.get("userId"), userId))
+                .filter(item -> performanceId == null || reservationMatchesPerformance(item, performanceId))
+                .sorted((a, b) -> String.valueOf(b.get("createdAt")).compareTo(String.valueOf(a.get("createdAt"))))
+                .findFirst()
+                .map(this::copy)
+                .orElse(Map.of());
+    }
+
+    private void persistReservation(Map<String, Object> reservation) {
+        jdbcTemplate.update("""
+                insert into reservation_remind
+                (user_id, performance_id, session_id, batch_id, ticket_level_id, quantity, viewer_ids, status, created_at, updated_at)
+                values (?, ?, ?, ?, ?, ?, ?, 'RESERVED', now(), now())
+                on duplicate key update performance_id=values(performance_id), batch_id=values(batch_id),
+                  ticket_level_id=values(ticket_level_id), quantity=values(quantity), viewer_ids=values(viewer_ids),
+                  status='RESERVED', updated_at=now()
+                """,
+                reservation.get("userId"),
+                reservation.get("performanceId"),
+                reservation.get("sessionId"),
+                reservation.get("batchId"),
+                reservation.get("ticketLevelId"),
+                reservation.get("quantity"),
+                joinLongs(longList(reservation.get("viewerIds")))
+        );
+    }
+
+    private Map<String, Object> reservationPayload(Map<String, Object> row) {
+        Map<String, Object> result = copy(row);
+        result.put("viewerIds", parseLongCsv(String.valueOf(row.getOrDefault("viewerIds", ""))));
+        return result;
+    }
+
+    private boolean reservationMatchesPerformance(Map<String, Object> reservation, Long performanceId) {
+        Long sessionId = longValue(reservation, "sessionId", null);
+        if (sessionId == null) return false;
+        return Objects.equals(resourceService.session(sessionId).get("performanceId"), performanceId);
     }
 
     public List<Map<String, Object>> userOrders(Long userId) {
@@ -1087,5 +1148,18 @@ public class Phase4TicketFlowService {
             return List.of();
         }
         return list.stream().filter(Objects::nonNull).map(item -> Long.valueOf(String.valueOf(item))).toList();
+    }
+
+    private String joinLongs(List<Long> values) {
+        return values.stream().map(String::valueOf).reduce((left, right) -> left + "," + right).orElse("");
+    }
+
+    private List<Long> parseLongCsv(String value) {
+        if (value == null || value.isBlank() || "null".equals(value)) return List.of();
+        List<Long> result = new ArrayList<>();
+        for (String part : value.split(",")) {
+            if (!part.isBlank()) result.add(Long.valueOf(part.trim()));
+        }
+        return result;
     }
 }

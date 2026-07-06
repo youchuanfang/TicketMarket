@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -59,6 +60,11 @@ public class Phase4TicketFlowController {
     @PostMapping("/api/reservations")
     public Result<Map<String, Object>> createReservation(@RequestBody Map<String, Object> payload) {
         return Result.ok(service.createReservation(currentUserId(), payload));
+    }
+
+    @GetMapping("/api/reservations/latest")
+    public Result<Map<String, Object>> latestReservation(@RequestParam(required = false) Long performanceId) {
+        return Result.ok(service.latestReservation(currentUserId(), performanceId));
     }
 
     @PostMapping("/api/orders/{id}/cancel")

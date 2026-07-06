@@ -398,7 +398,11 @@ CREATE TABLE IF NOT EXISTS reservation_remind (
   user_id BIGINT NOT NULL,
   performance_id BIGINT,
   session_id BIGINT,
-  status VARCHAR(32) NOT NULL DEFAULT 'WAITING',
+  batch_id BIGINT,
+  ticket_level_id BIGINT,
+  quantity INT NOT NULL DEFAULT 1,
+  viewer_ids VARCHAR(500),
+  status VARCHAR(32) NOT NULL DEFAULT 'RESERVED',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_user_session_remind (user_id, session_id)

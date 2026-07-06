@@ -10,10 +10,10 @@
         <el-option v-for="item in categories" :key="item.code" :label="item.name" :value="item.code" />
       </el-select>
       <el-select v-model="form.status" placeholder="售票状态" clearable>
-        <el-option label="正在售票" value="ON_SALE" />
+        <el-option label="热卖中" value="ON_SALE" />
         <el-option label="即将开售" value="COMING_SOON" />
-        <el-option label="票量紧张" value="RETURNED" />
-        <el-option label="已结束" value="LOCKED" />
+        <el-option label="已售罄" value="SOLD_OUT" />
+        <el-option label="已结束" value="ENDED" />
       </el-select>
       <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
     </div>

@@ -42,18 +42,18 @@
         </div>
       </div>
       <div>
-        <SectionHeader title="票量动态" to="/search?status=RETURNED" />
+        <SectionHeader title="库存动态" to="/search?status=SOLD_OUT" />
         <div class="compact-list">
           <RouterLink v-for="item in home.returned" :key="item.id" :to="`/performances/${item.id}`" class="compact-item warning">
             <span>{{ item.title }}</span>
-            <strong>{{ item.saleStatus === 'LOCKED' ? '已结束' : '票量紧张' }}</strong>
+            <strong>{{ item.saleStatus === 'ENDED' ? '已结束' : '已售罄' }}</strong>
           </RouterLink>
         </div>
       </div>
     </section>
 
     <section class="content-band">
-      <SectionHeader title="正在售票" to="/search?status=ON_SALE" />
+      <SectionHeader title="热卖中" to="/search?status=ON_SALE" />
       <div class="event-grid">
         <PerformanceCard v-for="item in home.onSale" :key="item.id" :item="item" />
       </div>

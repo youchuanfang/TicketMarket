@@ -34,11 +34,11 @@ public class PortalController {
 
     @GetMapping("/home")
     public Result<Map<String, Object>> home() {
-        List<PerformanceCard> all = performanceService.publicPerformances();
+        List<PerformanceCard> all = performanceService.publicPerformances().stream().map(this::withRealtimeSaleStatus).toList();
         List<PerformanceCard> hot = all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(5).toList();
         List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(4).toList();
         List<PerformanceCard> inventoryUpdates = all.stream()
-                .filter(item -> "RETURNED".equals(item.getSaleStatus()) || "LOCKED".equals(item.getSaleStatus()))
+                .filter(item -> "SOLD_OUT".equals(item.getSaleStatus()) || "ENDED".equals(item.getSaleStatus()))
                 .limit(4)
                 .toList();
         List<String> hotCities = allCities(all);
@@ -73,7 +73,7 @@ public class PortalController {
             @RequestParam(required = false) String status
     ) {
         String normalizedKeyword = normalizeSearch(keyword);
-        List<PerformanceCard> all = performanceService.publicPerformances();
+        List<PerformanceCard> all = performanceService.publicPerformances().stream().map(this::withRealtimeSaleStatus).toList();
         List<PerformanceCard> performances = all.stream()
                 .filter(item -> normalizedKeyword.isBlank()
                         || normalizeSearch(item.getTitle()).contains(normalizedKeyword)
@@ -95,14 +95,14 @@ public class PortalController {
                 "items", performances,
                 "filters", Map.of(
                         "cities", allCities(all),
-                        "statuses", List.of("ON_SALE", "COMING_SOON", "RETURNED", "LOCKED")
+                        "statuses", List.of("ON_SALE", "COMING_SOON", "SOLD_OUT", "ENDED")
                 )
         ));
     }
 
     @GetMapping("/performances/{id}")
     public Result<PerformanceCard> performanceDetail(@PathVariable Long id) {
-        return Result.ok(performanceService.publicPerformance(id));
+        return Result.ok(withRealtimeSaleStatus(performanceService.publicPerformance(id)));
     }
 
     @GetMapping("/movies/{id}")
@@ -140,5 +140,11 @@ public class PortalController {
         return value.toLowerCase()
                 .replaceAll("[\\p{P}\\p{S}\\s　]+", "")
                 .trim();
+    }
+
+    private PerformanceCard withRealtimeSaleStatus(PerformanceCard card) {
+        Map<String, Object> status = resourceService.frontPerformanceStatus(card.getId());
+        card.setSaleStatus(Objects.toString(status.get("status"), card.getSaleStatus()));
+        return card;
     }
 }

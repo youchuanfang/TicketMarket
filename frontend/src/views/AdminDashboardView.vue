@@ -77,7 +77,7 @@
           <el-table-column label="价格" width="130">
             <template #default="{ row }">￥{{ row.priceMin }} - ￥{{ row.priceMax }}</template>
           </el-table-column>
-          <el-table-column label="前台状态" width="120">
+          <el-table-column label="售卖状态" width="120">
             <template #default="{ row }">{{ statusText(row.saleStatus) }}</template>
           </el-table-column>
           <el-table-column label="发布" width="100">
@@ -394,12 +394,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="前台售卖状态">
-          <el-select v-model="performanceForm.saleStatus">
-            <el-option label="正在售票" value="ON_SALE" />
-            <el-option label="即将开售" value="COMING_SOON" />
-            <el-option label="票量紧张" value="RETURNED" />
-            <el-option label="已结束" value="LOCKED" />
-          </el-select>
+          <el-alert
+            title="由开售时间、锁票时间和实时库存自动判断"
+            description="未到开售时间显示“即将开售/预约抢票”；开售后且有库存显示“热卖中/立即购票”；无库存显示“已售罄”。"
+            type="info"
+            :closable="false"
+            show-icon
+          />
         </el-form-item>
         <el-form-item label="购票模式">
           <el-select v-model="performanceForm.saleMode">
@@ -760,10 +761,12 @@ const statusMap = {
   SCHEDULED: '待开售',
   NOT_STARTED: '未开售',
   SELLING: '售票中',
-  ON_SALE: '正在售票',
+  ON_SALE: '热卖中',
   COMING_SOON: '即将开售',
+  SOLD_OUT: '已售罄',
   RETURNED: '票量紧张',
   LOCKED: '已锁票/结束',
+  ENDED: '已结束',
   FINISHED: '已结束',
   AVAILABLE: '可售',
   UNRELEASED: '未开放',
