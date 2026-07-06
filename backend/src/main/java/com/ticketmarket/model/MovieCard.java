@@ -13,6 +13,8 @@ public class MovieCard {
     private String actors;
     private String summary;
     private String rating;
+    private Boolean homeRecommended;
+    private Integer homeSort;
     private List<SessionOption> sessions;
 
     public MovieCard() {
@@ -96,6 +98,22 @@ public class MovieCard {
 
     public void setRating(String rating) {
         this.rating = rating;
+    }
+
+    public Boolean getHomeRecommended() {
+        return homeRecommended;
+    }
+
+    public void setHomeRecommended(Boolean homeRecommended) {
+        this.homeRecommended = homeRecommended;
+    }
+
+    public Integer getHomeSort() {
+        return homeSort;
+    }
+
+    public void setHomeSort(Integer homeSort) {
+        this.homeSort = homeSort;
     }
 
     public List<SessionOption> getSessions() {

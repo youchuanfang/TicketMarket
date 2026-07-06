@@ -1,7 +1,9 @@
 package com.ticketmarket.controller;
 
 import com.ticketmarket.common.Result;
+import com.ticketmarket.model.MovieCard;
 import com.ticketmarket.model.PerformanceCard;
+import com.ticketmarket.service.PersistentMovieService;
 import com.ticketmarket.service.PersistentPerformanceService;
 import com.ticketmarket.service.Phase3ResourceService;
 import org.springframework.http.MediaType;
@@ -29,10 +31,12 @@ import java.util.UUID;
 public class Phase3AdminController {
     private final Phase3ResourceService service;
     private final PersistentPerformanceService performanceService;
+    private final PersistentMovieService movieService;
 
-    public Phase3AdminController(Phase3ResourceService service, PersistentPerformanceService performanceService) {
+    public Phase3AdminController(Phase3ResourceService service, PersistentPerformanceService performanceService, PersistentMovieService movieService) {
         this.service = service;
         this.performanceService = performanceService;
+        this.movieService = movieService;
     }
 
     @GetMapping("/performances")
@@ -68,6 +72,32 @@ public class Phase3AdminController {
     @DeleteMapping("/performances/{id}")
     public Result<Void> deletePerformance(@PathVariable Long id) {
         performanceService.deletePerformance(id);
+        return Result.ok();
+    }
+
+    @GetMapping("/movies")
+    public Result<List<MovieCard>> movies() {
+        return Result.ok(movieService.adminMovies());
+    }
+
+    @GetMapping("/movies/{id}")
+    public Result<MovieCard> movie(@PathVariable Long id) {
+        return Result.ok(movieService.movie(id));
+    }
+
+    @PostMapping("/movies")
+    public Result<MovieCard> createMovie(@RequestBody Map<String, Object> payload) {
+        return Result.ok(movieService.createMovie(payload));
+    }
+
+    @PutMapping("/movies/{id}")
+    public Result<MovieCard> updateMovie(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return Result.ok(movieService.updateMovie(id, payload));
+    }
+
+    @DeleteMapping("/movies/{id}")
+    public Result<Void> deleteMovie(@PathVariable Long id) {
+        movieService.deleteMovie(id);
         return Result.ok();
     }
 

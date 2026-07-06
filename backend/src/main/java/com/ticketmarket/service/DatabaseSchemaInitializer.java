@@ -237,6 +237,42 @@ public class DatabaseSchemaInitializer {
                   updated_at datetime not null default current_timestamp on update current_timestamp
                 ) engine=InnoDB default charset=utf8mb4
                 """);
+        statement("""
+                create table if not exists movie (
+                  id bigint primary key auto_increment,
+                  title varchar(180) not null,
+                  genre varchar(120),
+                  release_date date,
+                  duration_minutes int,
+                  director varchar(120),
+                  actors varchar(500),
+                  rating varchar(32),
+                  summary text,
+                  poster_path varchar(500),
+                  home_recommended tinyint not null default 0,
+                  home_sort int not null default 0,
+                  status varchar(32) not null default 'PUBLISHED',
+                  created_at datetime not null default current_timestamp,
+                  updated_at datetime not null default current_timestamp on update current_timestamp,
+                  deleted tinyint not null default 0
+                ) engine=InnoDB default charset=utf8mb4
+                """);
+        statement("""
+                create table if not exists reservation_remind (
+                  id bigint primary key auto_increment,
+                  user_id bigint not null,
+                  performance_id bigint,
+                  session_id bigint,
+                  batch_id bigint,
+                  ticket_level_id bigint,
+                  quantity int not null default 1,
+                  viewer_ids varchar(500),
+                  status varchar(32) not null default 'RESERVED',
+                  created_at datetime not null default current_timestamp,
+                  updated_at datetime not null default current_timestamp on update current_timestamp,
+                  unique key uk_user_session_remind (user_id, session_id)
+                ) engine=InnoDB default charset=utf8mb4
+                """);
 
         addColumn("performance", "subtitle", "varchar(255)");
         addColumn("performance", "category_name", "varchar(80)");
@@ -256,7 +292,15 @@ public class DatabaseSchemaInitializer {
         addColumn("performance", "service_tags", "varchar(500)");
         addColumn("performance", "purchase_mode", "varchar(32) default 'SELECTABLE'");
         addColumn("performance", "publish_status", "varchar(32) default 'DRAFT'");
+        addColumn("performance", "home_recommended", "tinyint not null default 0");
+        addColumn("performance", "home_sort", "int not null default 0");
         addColumn("performance", "start_time", "datetime");
+        addColumn("movie", "actors", "varchar(500)");
+        addColumn("movie", "rating", "varchar(32)");
+        addColumn("movie", "home_recommended", "tinyint not null default 0");
+        addColumn("movie", "home_sort", "int not null default 0");
+        addColumn("movie", "status", "varchar(32) not null default 'PUBLISHED'");
+        addColumn("movie", "deleted", "tinyint not null default 0");
         addColumn("venue", "city_name", "varchar(80)");
         addColumn("venue", "description", "text");
         addColumn("venue", "venue_type", "varchar(32) not null default 'THEATER'");
@@ -299,6 +343,10 @@ public class DatabaseSchemaInitializer {
         addColumn("sale_batch", "enable_queue", "tinyint not null default 1");
         addColumn("sale_batch", "deleted", "tinyint not null default 0");
         addColumn("stock_pool", "available_for_next_batch", "tinyint not null default 1");
+        addColumn("reservation_remind", "batch_id", "bigint");
+        addColumn("reservation_remind", "ticket_level_id", "bigint");
+        addColumn("reservation_remind", "quantity", "int not null default 1");
+        addColumn("reservation_remind", "viewer_ids", "varchar(500)");
     }
 
     private void addColumn(String table, String column, String definition) {

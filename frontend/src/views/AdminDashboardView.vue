@@ -77,7 +77,7 @@
           <el-table-column label="价格" width="130">
             <template #default="{ row }">￥{{ row.priceMin }} - ￥{{ row.priceMax }}</template>
           </el-table-column>
-          <el-table-column label="前台状态" width="120">
+          <el-table-column label="售卖状态" width="120">
             <template #default="{ row }">{{ statusText(row.saleStatus) }}</template>
           </el-table-column>
           <el-table-column label="发布" width="100">
@@ -87,11 +87,48 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="首页" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.homeRecommended ? 'success' : 'info'" effect="plain">{{ row.homeRecommended ? '已挂载' : '未挂载' }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="操作" width="280" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openPerformance(row)">编辑全部细节</el-button>
               <RouterLink class="table-link" :to="`/performances/${row.id}`">预览</RouterLink>
               <el-button link type="danger" @click="unpublishPerformance(row)">下架</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
+
+      <section v-else-if="activeSection === 'movie'" class="admin-card">
+        <div class="table-head">
+          <h2>电影管理</h2>
+          <el-button type="primary" @click="openMovie()">新增电影</el-button>
+        </div>
+        <el-table :data="movies" border empty-text="暂无电影">
+          <el-table-column label="海报" width="92">
+            <template #default="{ row }">
+              <img v-if="assetUrl(row.poster)" :src="assetUrl(row.poster)" :alt="row.title" class="admin-thumb" />
+              <span v-else class="thumb-placeholder">待导入</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="电影" min-width="180" />
+          <el-table-column prop="genre" label="类型" width="140" />
+          <el-table-column prop="releaseDate" label="上映" width="120" />
+          <el-table-column label="首页" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.homeRecommended ? 'success' : 'info'" effect="plain">{{ row.homeRecommended ? '已挂载' : '未挂载' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="排片" width="90">
+            <template #default="{ row }">{{ row.sessions?.length || 0 }} 场</template>
+          </el-table-column>
+          <el-table-column label="操作" width="180" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openMovie(row)">编辑</el-button>
+              <el-button link type="danger" @click="deleteMovie(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -230,9 +267,7 @@
             <template #default="{ row }">{{ areaName(row.areaId) }}</template>
           </el-table-column>
           <el-table-column prop="price" label="价格" width="120" />
-          <el-table-column prop="totalStock" label="总库存" width="100" />
-          <el-table-column prop="releasedStock" label="已开放" width="100" />
-          <el-table-column prop="unreleasedStock" label="未开放" width="100" />
+          <el-table-column prop="releasedStock" label="库存" width="100" />
           <el-table-column prop="soldStock" label="已售" width="90" />
           <el-table-column label="操作" width="130">
             <template #default="{ row }">
@@ -265,7 +300,6 @@
           <el-table-column label="开放方式" width="110">
             <template #default="{ row }">{{ releaseTypeText(row.releaseType) }}</template>
           </el-table-column>
-          <el-table-column prop="releaseQuantity" label="数量" width="90" />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">{{ statusText(row.status) }}</template>
           </el-table-column>
@@ -394,13 +428,18 @@
           </el-select>
         </el-form-item>
         <el-form-item label="前台售卖状态">
-          <el-select v-model="performanceForm.saleStatus">
-            <el-option label="正在售票" value="ON_SALE" />
-            <el-option label="即将开售" value="COMING_SOON" />
-            <el-option label="票量紧张" value="RETURNED" />
-            <el-option label="已结束" value="LOCKED" />
-          </el-select>
+          <el-alert
+            title="由开售时间、锁票时间和实时库存自动判断"
+            description="未到开售时间显示“即将开售/预约抢票”；开售后且有库存显示“热卖中/立即购票”；无库存显示“已售罄”。"
+            type="info"
+            :closable="false"
+            show-icon
+          />
         </el-form-item>
+        <el-form-item label="首页推荐">
+          <el-switch v-model="performanceForm.homeRecommended" active-text="挂到首页" inactive-text="不挂载" />
+        </el-form-item>
+        <el-form-item label="首页排序"><el-input-number v-model="performanceForm.homeSort" :min="0" /></el-form-item>
         <el-form-item label="购票模式">
           <el-select v-model="performanceForm.saleMode">
             <el-option label="自主选座" value="SELECTABLE" />
@@ -437,14 +476,13 @@
         <el-form-item label="统一锁票时间">
           <el-date-picker v-model="performanceForm.quickLockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="留空则为演出前 1 小时" clearable />
         </el-form-item>
-        <el-form-item label="首批开放数量"><el-input-number v-model="performanceForm.quickBatchReleaseQuantity" :min="0" /></el-form-item>
         <el-form-item label="票档明细" class="span-2">
           <div class="quick-ticket-editor">
-            <p class="form-tip">发布时会按每个场次自动创建票档、开售批次和场次座位。体育场馆选择“看台/内场”，剧场和影院默认按座位区售卖。</p>
+            <p class="form-tip">票档名称由区域和价格自动生成，例如“看台517”。库存按每个票档单独设置，不再设置总批次数量。</p>
             <div v-for="(level, index) in performanceForm.quickTicketLevels" :key="index" class="quick-ticket-row">
               <label class="quick-field">
-                <span>票档名称</span>
-                <el-input v-model="level.name" placeholder="如 看台票 ￥517" />
+                <span>自动票档</span>
+                <el-input :model-value="quickTicketName(level)" disabled />
               </label>
               <label class="quick-field">
                 <span>区域</span>
@@ -457,12 +495,8 @@
                 <el-input-number v-model="level.price" :min="0" />
               </label>
               <label class="quick-field small">
-                <span>总库存</span>
-                <el-input-number v-model="level.totalStock" :min="0" />
-              </label>
-              <label class="quick-field small">
-                <span>开放库存</span>
-                <el-input-number v-model="level.releasedStock" :min="0" />
+                <span>库存</span>
+                <el-input-number v-model="level.stock" :min="0" />
               </label>
               <el-button type="danger" @click="removeQuickTicketLevel(index)">删除</el-button>
             </div>
@@ -518,6 +552,42 @@
       <template #footer>
         <el-button @click="performanceDialog = false">取消</el-button>
         <el-button type="primary" @click="savePerformance">保存演出</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="movieDialog" :title="movieForm.id ? '编辑电影' : '新增电影'" width="920px">
+      <el-form label-position="top" class="admin-editor-grid">
+        <el-form-item label="电影名称"><el-input v-model="movieForm.title" /></el-form-item>
+        <el-form-item label="类型"><el-input v-model="movieForm.genre" /></el-form-item>
+        <el-form-item label="上映日期"><el-date-picker v-model="movieForm.releaseDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
+        <el-form-item label="片长"><el-input-number v-model="movieForm.durationMinutes" :min="1" /></el-form-item>
+        <el-form-item label="导演"><el-input v-model="movieForm.director" /></el-form-item>
+        <el-form-item label="主演"><el-input v-model="movieForm.actors" /></el-form-item>
+        <el-form-item label="评分"><el-input v-model="movieForm.rating" /></el-form-item>
+        <el-form-item label="首页推荐"><el-switch v-model="movieForm.homeRecommended" active-text="挂到首页" inactive-text="不挂载" /></el-form-item>
+        <el-form-item label="首页排序"><el-input-number v-model="movieForm.homeSort" :min="0" /></el-form-item>
+        <el-form-item label="海报" class="span-2"><el-input v-model="movieForm.poster" placeholder="图片地址" /></el-form-item>
+        <el-form-item label="简介" class="span-2"><el-input v-model="movieForm.summary" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="排片" class="span-2">
+          <div class="quick-ticket-editor">
+            <div v-for="(session, index) in movieForm.sessions" :key="index" class="quick-ticket-row">
+              <label class="quick-field"><span>城市</span><el-input v-model="session.city" /></label>
+              <label class="quick-field"><span>电影院</span><el-input v-model="session.cinemaName" /></label>
+              <label class="quick-field"><span>影厅</span><el-input v-model="session.hallName" /></label>
+              <label class="quick-field"><span>放映时间</span><el-date-picker v-model="session.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
+              <label class="quick-field"><span>开售时间</span><el-date-picker v-model="session.saleStartTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
+              <label class="quick-field"><span>锁票时间</span><el-date-picker v-model="session.lockTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" /></label>
+              <label class="quick-field small"><span>票价</span><el-input-number v-model="session.price" :min="0" /></label>
+              <label class="quick-field small"><span>库存</span><el-input-number v-model="session.stock" :min="0" /></label>
+              <el-button type="danger" @click="removeMovieSession(index)">删除</el-button>
+            </div>
+            <el-button @click="addMovieSession">新增排片</el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="movieDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveMovie">保存电影</el-button>
       </template>
     </el-dialog>
 
@@ -595,16 +665,14 @@
 
     <el-dialog v-model="ticketLevelDialog" :title="ticketLevelForm.id ? '编辑票档' : '新增票档'" width="620px">
       <el-form label-position="top" class="dialog-form">
-        <el-form-item label="票档名称"><el-input v-model="ticketLevelForm.name" /></el-form-item>
+        <el-form-item label="自动票档名称"><el-input :model-value="ticketLevelAutoName" disabled /></el-form-item>
         <el-form-item label="关联区域">
           <el-select v-model="ticketLevelForm.areaId" placeholder="选择区域">
             <el-option v-for="area in ticketLevelAreas" :key="area.id" :label="area.areaName" :value="area.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="价格"><el-input-number v-model="ticketLevelForm.price" :min="0" /></el-form-item>
-        <el-form-item label="总库存"><el-input-number v-model="ticketLevelForm.totalStock" :min="0" /></el-form-item>
-        <el-form-item label="已开放库存"><el-input-number v-model="ticketLevelForm.releasedStock" :min="0" /></el-form-item>
-        <el-form-item label="未开放库存"><el-input-number v-model="ticketLevelForm.unreleasedStock" :min="0" /></el-form-item>
+        <el-form-item label="库存"><el-input-number v-model="ticketLevelForm.stock" :min="0" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="ticketLevelDialog = false">取消</el-button>
@@ -629,7 +697,6 @@
             <el-option label="按比例开放" value="RATIO" />
           </el-select>
         </el-form-item>
-        <el-form-item label="开放数量"><el-input-number v-model="batchForm.releaseQuantity" :min="0" /></el-form-item>
         <el-form-item label="每人限购"><el-input-number v-model="batchForm.purchaseLimit" :min="1" /></el-form-item>
       </el-form>
       <template #footer>
@@ -706,6 +773,7 @@ const user = useUserStore()
 const metrics = reactive({ performanceCount: 0, movieCount: 0, orderCount: 0, ticketCount: 0, refundPending: 0, checkinToday: 0 })
 const checkerMetrics = reactive({ checkinToday: 0, successRate: '0%', latestResult: '暂无数据' })
 const performances = ref([])
+const movies = ref([])
 const categories = ref([])
 const venues = ref([])
 const areas = ref([])
@@ -726,12 +794,14 @@ const seatFormAreas = ref([])
 const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowStart: 1, rowEnd: 3, seatsPerRow: 12, startX: 60, startY: 80, gapX: 30, gapY: 30, aisleAfterSeats: '6' })
 
 const performanceDialog = ref(false)
+const movieDialog = ref(false)
 const venueDialog = ref(false)
 const areaDialog = ref(false)
 const sessionDialog = ref(false)
 const ticketLevelDialog = ref(false)
 const batchDialog = ref(false)
 const performanceForm = reactive(emptyPerformance())
+const movieForm = reactive(emptyMovie())
 const venueForm = reactive(emptyVenue())
 const areaForm = reactive(emptyArea())
 const sessionForm = reactive(emptySession())
@@ -742,6 +812,7 @@ const roleMap = { ADMIN: '系统管理员', MANAGER: '票务管理员', CHECKER:
 const menus = [
   { key: 'overview', title: '运营概览', icon: 'DataAnalysis', path: '/admin', roles: ['ADMIN', 'MANAGER'] },
   { key: 'performance', title: '演出发布', icon: 'Management', path: '/admin/performance', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'movie', title: '电影管理', icon: 'VideoCamera', path: '/admin/movie', roles: ['ADMIN', 'MANAGER'] },
   { key: 'venue', title: '场馆管理', icon: 'Location', path: '/admin/venue', roles: ['ADMIN', 'MANAGER'] },
   { key: 'seat-template', title: '座位模板', icon: 'Grid', path: '/admin/seat-template', roles: ['ADMIN', 'MANAGER'] },
   { key: 'session', title: '场次管理', icon: 'Calendar', path: '/admin/session', roles: ['ADMIN', 'MANAGER'] },
@@ -760,10 +831,12 @@ const statusMap = {
   SCHEDULED: '待开售',
   NOT_STARTED: '未开售',
   SELLING: '售票中',
-  ON_SALE: '正在售票',
+  ON_SALE: '热卖中',
   COMING_SOON: '即将开售',
+  SOLD_OUT: '已售罄',
   RETURNED: '票量紧张',
   LOCKED: '已锁票/结束',
+  ENDED: '已结束',
   FINISHED: '已结束',
   AVAILABLE: '可售',
   UNRELEASED: '未开放',
@@ -796,6 +869,7 @@ const activeMenu = computed(() => menus.find((item) => item.key === activeSectio
 const roleText = computed(() => roleMap[user.role] || user.role)
 const selectedVenue = computed(() => venues.value.find((item) => String(item.id) === String(route.params.id || seatForm.venueId)))
 const selectedPerformanceVenue = computed(() => venues.value.find((item) => String(item.id) === String(performanceForm.venueId)))
+const ticketLevelAutoName = computed(() => `${areaName(ticketLevelForm.areaId).replace(/^区域\s*/, '票档')}${Number(ticketLevelForm.price || 0)}`)
 const quickAreaOptions = computed(() => {
   const venueType = selectedPerformanceVenue.value?.venueType
   if (venueType === 'STADIUM') {
@@ -822,9 +896,10 @@ const sessionLabel = (session) => session ? `${performanceTitle(session.performa
 async function loadAll() {
   if (user.canUseAdminApi) {
     Object.assign(metrics, await adminApi.dashboard())
-    const [categoryRows, performanceRows, venueRows, sessionRows, batchRows, poolRows] = await Promise.all([
+    const [categoryRows, performanceRows, movieRows, venueRows, sessionRows, batchRows, poolRows] = await Promise.all([
       getCategories(),
       adminApi.performances(),
+      adminApi.movies(),
       adminApi.venues(),
       adminApi.sessions(),
       adminApi.saleBatches(),
@@ -832,6 +907,7 @@ async function loadAll() {
     ])
     categories.value = categoryRows
     performances.value = performanceRows
+    movies.value = movieRows
     venues.value = venueRows
     sessions.value = sessionRows
     saleBatches.value = batchRows
@@ -896,10 +972,9 @@ function emptyPerformance() {
     sessionDates: ['2026-08-18 19:30:00'],
     quickSaleStartTime: '2026-07-01 10:00:00',
     quickLockTime: '',
-    quickBatchReleaseQuantity: 0,
     quickTicketLevels: [
-      { name: '看台票 ￥517', areaType: 'SEATED', price: 517, totalStock: 1000, releasedStock: 1000 },
-      { name: '内场票 ￥1717', areaType: 'STANDING', price: 1717, totalStock: 600, releasedStock: 600 }
+      { areaType: 'SEATED', price: 517, stock: 1000 },
+      { areaType: 'STANDING', price: 1717, stock: 600 }
     ],
     poster: '/uploads/posters/performance/poster-101.svg',
     banner: '',
@@ -907,6 +982,8 @@ function emptyPerformance() {
     saleStatus: 'COMING_SOON',
     saleMode: 'SELECTABLE',
     publishStatus: 'DRAFT',
+    homeRecommended: false,
+    homeSort: 0,
     tagsText: '实名制,电子票,限购2张',
     summary: '',
     intro: '',
@@ -947,11 +1024,11 @@ function emptySession() {
 }
 
 function emptyTicketLevel() {
-  return { id: null, sessionId: selectedSessionId.value, name: '标准票', price: 180, areaId: null, totalStock: 0, releasedStock: 0, unreleasedStock: 0, status: 'ENABLED' }
+  return { id: null, sessionId: selectedSessionId.value, price: 180, areaId: null, stock: 0, totalStock: 0, releasedStock: 0, unreleasedStock: 0, status: 'ENABLED' }
 }
 
 function emptyBatch() {
-  return { id: null, sessionId: selectedSessionId.value, batchName: '第一批开售', saleStartTime: '2026-07-20 10:00:00', lockTime: '2026-08-01 18:00:00', releaseType: 'QUANTITY', releaseQuantity: 50, releaseRatio: 0, purchaseLimit: 2, enableQueue: true, allowReturnDuringSale: true, status: 'NOT_STARTED' }
+  return { id: null, sessionId: selectedSessionId.value, batchName: '第一批开售', saleStartTime: '2026-07-20 10:00:00', lockTime: '2026-08-01 18:00:00', releaseType: 'QUANTITY', releaseQuantity: 0, releaseRatio: 0, purchaseLimit: 2, enableQueue: true, allowReturnDuringSale: true, status: 'NOT_STARTED' }
 }
 
 function resetReactive(target, source) {
@@ -980,11 +1057,9 @@ async function openPerformance(row) {
         next.quickTicketLevels = levels.map((level) => {
           const area = sessionAreas.find((item) => String(item.id) === String(level.areaId))
           return {
-            name: level.name,
             areaType: area?.areaType || 'SEATED',
             price: Number(level.price || 0),
-            totalStock: Number(level.totalStock || 0),
-            releasedStock: Number(level.releasedStock || 0)
+            stock: Number(level.releasedStock || level.totalStock || 0)
           }
         })
       }
@@ -1019,6 +1094,37 @@ function syncPerformanceVenue() {
     performanceForm.quickTicketLevels.forEach((level) => {
       level.areaType = 'SEATED'
     })
+  }
+}
+
+function emptyMovie() {
+  return {
+    id: null,
+    title: '',
+    genre: '剧情',
+    releaseDate: '2026-08-01',
+    durationMinutes: 120,
+    director: '',
+    actors: '',
+    rating: '',
+    poster: '/uploads/posters/movie/movie-201.svg',
+    summary: '',
+    homeRecommended: false,
+    homeSort: 0,
+    sessions: [emptyMovieSession()]
+  }
+}
+
+function emptyMovieSession() {
+  return {
+    city: '上海',
+    cinemaName: '星河影城一号厅',
+    hallName: '1号厅',
+    startTime: '2026-08-01 19:30:00',
+    saleStartTime: '2026-07-01 10:00:00',
+    lockTime: '2026-12-31 23:00:00',
+    price: 68,
+    stock: 96
   }
 }
 
@@ -1098,11 +1204,43 @@ function removeBlock(index) {
 }
 
 function addQuickTicketLevel() {
-  performanceForm.quickTicketLevels.push({ name: '新票档', areaType: quickAreaOptions.value[0]?.value || 'SEATED', price: 380, totalStock: 100, releasedStock: 100 })
+  performanceForm.quickTicketLevels.push({ areaType: quickAreaOptions.value[0]?.value || 'SEATED', price: 380, stock: 100 })
 }
 
 function removeQuickTicketLevel(index) {
   performanceForm.quickTicketLevels.splice(index, 1)
+}
+
+function openMovie(row) {
+  resetReactive(movieForm, { ...emptyMovie(), ...(row ? clone(row) : {}) })
+  movieForm.sessions = movieForm.sessions?.length
+    ? movieForm.sessions.map((session) => ({ ...emptyMovieSession(), ...session, cinemaName: session.cinemaName || venueName(session.venueId) }))
+    : [emptyMovieSession()]
+  movieDialog.value = true
+}
+
+function addMovieSession() {
+  const last = movieForm.sessions.at(-1) || emptyMovieSession()
+  movieForm.sessions.push({ ...emptyMovieSession(), ...last, startTime: addHours(last.startTime, 2) })
+}
+
+function removeMovieSession(index) {
+  movieForm.sessions.splice(index, 1)
+}
+
+async function saveMovie() {
+  const payload = clone(movieForm)
+  if (payload.id) await adminApi.updateMovie(payload.id, payload)
+  else await adminApi.createMovie(payload)
+  ElMessage.success('电影已保存')
+  movieDialog.value = false
+  await loadAll()
+}
+
+async function deleteMovie(row) {
+  await adminApi.deleteMovie(row.id)
+  ElMessage.success('电影已删除')
+  await loadAll()
 }
 
 function addSessionDate() {
@@ -1136,6 +1274,10 @@ function quickAreaName(level) {
   if (venueType === 'STADIUM') return level.areaType === 'STANDING' ? '内场' : '看台'
   if (venueType === 'CINEMA') return '座位区'
   return '座位区'
+}
+
+function quickTicketName(level) {
+  return `${quickAreaName(level)}${Number(level.price || 0)}`
 }
 
 function quickAreaColor(level) {
@@ -1200,19 +1342,17 @@ async function syncSessionTicketLevels(session, levels, areasByName) {
   for (const level of levels) {
     const areaId = areasByName.get(quickAreaName(level))?.id
     const price = Number(level.price || 0)
-    const total = Number(level.totalStock || 0)
-    const released = Number(level.releasedStock || total)
+    const stock = Number(level.stock || level.totalStock || 0)
     const payload = {
       sessionId: session.id,
-      name: level.name,
       areaId,
       price,
-      totalStock: total,
-      releasedStock: released,
-      unreleasedStock: Math.max(0, total - released)
+      stock,
+      totalStock: stock,
+      releasedStock: stock,
+      unreleasedStock: 0
     }
-    const matched = existingLevels.find((item) => !usedIds.has(item.id) && item.name === level.name)
-      || existingLevels.find((item) => !usedIds.has(item.id) && String(item.areaId || '') === String(areaId || '') && Number(item.price) === price)
+    const matched = existingLevels.find((item) => !usedIds.has(item.id) && String(item.areaId || '') === String(areaId || '') && Number(item.price) === price)
       || existingLevels.find((item) => !usedIds.has(item.id) && Number(item.price) === price)
     if (matched) {
       usedIds.add(matched.id)
@@ -1225,14 +1365,13 @@ async function syncSessionTicketLevels(session, levels, areasByName) {
 
 async function syncFirstSaleBatch(session, levels) {
   const existingBatch = saleBatches.value.find((batch) => String(batch.sessionId) === String(session.id))
-  const autoReleaseQuantity = levels.reduce((sum, level) => sum + Number(level.releasedStock || level.totalStock || 0), 0)
   const payload = {
     sessionId: session.id,
     batchName: existingBatch?.batchName || '第一批开售',
     saleStartTime: normalizeDateTime(performanceForm.quickSaleStartTime || performanceForm.startTime),
     lockTime: normalizeDateTime(performanceForm.quickLockTime) || addHours(session.startTime, -1),
     releaseType: 'QUANTITY',
-    releaseQuantity: Number(performanceForm.quickBatchReleaseQuantity || 0) || autoReleaseQuantity,
+    releaseQuantity: 0,
     purchaseLimit: existingBatch?.purchaseLimit || 6,
     enableQueue: true,
     allowReturnDuringSale: true,
@@ -1373,15 +1512,17 @@ async function loadTicketLevelAreas() {
 
 async function openTicketLevel(row) {
   resetReactive(ticketLevelForm, row ? { ...emptyTicketLevel(), ...clone(row) } : emptyTicketLevel())
+  ticketLevelForm.stock = Number(ticketLevelForm.releasedStock || ticketLevelForm.totalStock || ticketLevelForm.stock || 0)
   ticketLevelForm.sessionId = ticketLevelForm.sessionId || selectedSessionId.value
   await loadTicketLevelAreas()
   ticketLevelDialog.value = true
 }
 
 async function saveTicketLevel() {
-  const total = Number(ticketLevelForm.totalStock || 0)
-  const released = Number(ticketLevelForm.releasedStock || 0)
-  ticketLevelForm.unreleasedStock = Math.max(0, total - released)
+  const stock = Number(ticketLevelForm.stock || 0)
+  ticketLevelForm.totalStock = stock
+  ticketLevelForm.releasedStock = stock
+  ticketLevelForm.unreleasedStock = 0
   if (ticketLevelForm.id) await adminApi.updateTicketLevel(ticketLevelForm.id, ticketLevelForm)
   else await adminApi.createTicketLevel(ticketLevelForm)
   ElMessage.success('票档已保存')

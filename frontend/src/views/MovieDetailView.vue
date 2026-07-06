@@ -19,7 +19,7 @@
     <section class="detail-section">
       <SectionHeader title="放映场次" />
       <div class="session-grid">
-        <button v-for="session in movie.sessions" :key="session.id" class="session-card">
+        <button v-for="session in movie.sessions" :key="session.id" class="session-card" @click="router.push(`/session/${session.id}/seats`)">
           <strong>{{ session.startTime }}</strong>
           <span>{{ session.hallName }} · 支持选座</span>
         </button>
@@ -31,12 +31,14 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SectionHeader from '../components/SectionHeader.vue'
 import { getMovie } from '../api/portal'
 import { assetUrl } from '../utils/assets'
 
 const route = useRoute()
+const router = useRouter()
 const movie = ref(null)
 
 onMounted(async () => {

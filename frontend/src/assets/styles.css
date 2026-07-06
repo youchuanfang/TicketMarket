@@ -312,10 +312,16 @@ button {
   background: #e9f8f9;
 }
 
-.event-status.RETURNED,
-.event-status.LOCKED {
+.event-status.RETURNED {
   color: var(--gold);
   background: #fff7e8;
+}
+
+.event-status.SOLD_OUT,
+.event-status.LOCKED,
+.event-status.ENDED {
+  color: var(--muted);
+  background: #f1f3f5;
 }
 
 .card-footer,

@@ -26,8 +26,10 @@ const props = defineProps({
 })
 
 const statusMap = {
-  ON_SALE: '正在售票',
+  ON_SALE: '热卖中',
   COMING_SOON: '即将开售',
+  SOLD_OUT: '已售罄',
+  ENDED: '已结束',
   RETURNED: '票量紧张',
   LOCKED: '已结束'
 }

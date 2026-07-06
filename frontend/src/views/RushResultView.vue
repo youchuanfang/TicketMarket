@@ -9,11 +9,11 @@
     </section>
     <section v-else class="flow-status">
       <div class="failure-card">
-        <h1>别灰心，请继续尝试</h1>
+        <h1>不要气馁，请继续尝试</h1>
         <p>当前票源紧张，你可以继续尝试或选择其他票档。</p>
         <div class="action-row">
           <el-button type="primary" @click="retry">继续尝试</el-button>
-          <el-button @click="backToDetail">返回详情</el-button>
+          <el-button @click="backToPurchase">返回购票</el-button>
         </div>
       </div>
     </section>
@@ -42,9 +42,9 @@ const retry = () => {
   const performanceId = result.value?.performanceId
   router.push(performanceId ? `/performance/${performanceId}/purchase?sessionId=${result.value.sessionId}` : '/search')
 }
-const backToDetail = () => {
+const backToPurchase = () => {
   const performanceId = result.value?.performanceId
-  router.push(performanceId ? `/performances/${performanceId}` : '/')
+  router.push(performanceId ? `/performance/${performanceId}/purchase?sessionId=${result.value.sessionId}` : '/search')
 }
 
 onMounted(async () => {

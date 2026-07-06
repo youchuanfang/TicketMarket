@@ -117,7 +117,7 @@ public class PersistentPerformanceService {
                   venue_id=?, venue_name=?, address=?, poster_path=?, banner_path=?, detail_image_path=?,
                   price_min=?, price_max=?, summary=?, introduction=?, detail_content=?, artist_intro=?,
                   venue_intro=?, purchase_notice=?, refund_notice=?, entry_notice=?, service_tags=?,
-                  purchase_mode=?, publish_status=?, status=?, start_time=?, updated_at=now()
+                  purchase_mode=?, publish_status=?, status=?, home_recommended=?, home_sort=?, start_time=?, updated_at=now()
                 where id=? and deleted=0
                 """,
                 str(payload, "title", "未命名演出"),
@@ -146,6 +146,8 @@ public class PersistentPerformanceService {
                 str(payload, "saleMode", str(payload, "purchaseMode", "SELECTABLE")),
                 str(payload, "publishStatus", "DRAFT"),
                 str(payload, "saleStatus", str(payload, "status", "COMING_SOON")),
+                boolValue(payload, "homeRecommended", false),
+                intValue(payload, "homeSort", 0),
                 timeValue(payload, "startTime", null),
                 id
         );
@@ -248,8 +250,8 @@ public class PersistentPerformanceService {
                 (title, subtitle, category_id, category_name, city_id, city_name, venue_id, venue_name, address,
                  poster_path, banner_path, detail_image_path, price_min, price_max, summary, introduction,
                  detail_content, artist_intro, venue_intro, purchase_notice, refund_notice, entry_notice,
-                 service_tags, purchase_mode, publish_status, status, start_time, created_at, updated_at, deleted)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now(), 0)
+                 service_tags, purchase_mode, publish_status, status, home_recommended, home_sort, start_time, created_at, updated_at, deleted)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now(), 0)
                 """,
                 str(payload, "title", "未命名演出"),
                 str(payload, "subtitle", ""),
@@ -277,6 +279,8 @@ public class PersistentPerformanceService {
                 str(payload, "saleMode", str(payload, "purchaseMode", "SELECTABLE")),
                 publishStatus,
                 str(payload, "saleStatus", str(payload, "status", "COMING_SOON")),
+                boolValue(payload, "homeRecommended", false),
+                intValue(payload, "homeSort", 0),
                 timeValue(payload, "startTime", null)
         );
         return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
@@ -344,7 +348,7 @@ public class PersistentPerformanceService {
         return list.stream()
                 .filter(Map.class::isInstance)
                 .map(item -> (Map<String, Object>) item)
-                .filter(item -> intValue(item, "price", 0) > 0 && intValue(item, "totalStock", 0) > 0)
+                .filter(item -> intValue(item, "price", 0) > 0 && intValue(item, "stock", intValue(item, "totalStock", 0)) >= 0)
                 .toList();
     }
 
@@ -475,10 +479,10 @@ public class PersistentPerformanceService {
     }
 
     private void ensurePublishingTicketLevel(Long sessionId, Long areaId, Map<String, Object> level) {
-        String name = str(level, "name", "标准票");
         BigDecimal price = decimalValue(level, "price", BigDecimal.ZERO);
-        int total = intValue(level, "totalStock", 0);
-        int released = intValue(level, "releasedStock", total);
+        String name = ticketLevelName(areaId, price.intValue());
+        int total = intValue(level, "stock", intValue(level, "totalStock", 0));
+        int released = total;
         List<Long> existing = jdbcTemplate.queryForList("""
                 select id from ticket_level
                 where session_id=? and (name=? or price=?) and deleted=0
@@ -501,10 +505,6 @@ public class PersistentPerformanceService {
     }
 
     private void ensurePublishingBatch(Long sessionId, Map<String, Object> payload, String startTime, List<Map<String, Object>> levels) {
-        int releaseQuantity = intValue(payload, "quickBatchReleaseQuantity", 0);
-        if (releaseQuantity <= 0) {
-            releaseQuantity = levels.stream().mapToInt(item -> intValue(item, "releasedStock", intValue(item, "totalStock", 0))).sum();
-        }
         Timestamp saleStart = timeFromText(str(payload, "quickSaleStartTime", str(payload, "startTime", startTime)));
         Timestamp lockTime = timeFromText(str(payload, "quickLockTime", ""));
         if (lockTime == null) lockTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).minusHours(1));
@@ -517,10 +517,10 @@ public class PersistentPerformanceService {
             jdbcTemplate.update("""
                     update sale_batch
                     set name='第一批开售', batch_name='第一批开售', sale_start_time=?, lock_time=?,
-                        open_mode='QUANTITY', release_type='QUANTITY', open_stock=?, release_quantity=?,
+                        open_mode='QUANTITY', release_type='QUANTITY', open_stock=0, release_quantity=0,
                         limit_per_user=2, purchase_limit=2, queue_enabled=1, enable_queue=1, updated_at=now()
                     where id=? and deleted=0
-                    """, saleStart, lockTime, releaseQuantity, releaseQuantity, existing.get(0));
+                    """, saleStart, lockTime, existing.get(0));
             return;
         }
         jdbcTemplate.update("""
@@ -528,8 +528,14 @@ public class PersistentPerformanceService {
                 (session_id, name, batch_name, sale_start_time, lock_time, open_mode, release_type, open_stock,
                  release_quantity, release_ratio, allow_return_current_round, allow_return_during_sale,
                  limit_per_user, purchase_limit, queue_enabled, enable_queue, status, created_at, updated_at, deleted)
-                values (?, '第一批开售', '第一批开售', ?, ?, 'QUANTITY', 'QUANTITY', ?, ?, 0, 1, 1, 2, 2, 1, 1, 'NOT_STARTED', now(), now(), 0)
-                """, sessionId, saleStart, lockTime, releaseQuantity, releaseQuantity);
+                values (?, '第一批开售', '第一批开售', ?, ?, 'QUANTITY', 'QUANTITY', 0, 0, 0, 1, 1, 2, 2, 1, 1, 'NOT_STARTED', now(), now(), 0)
+                """, sessionId, saleStart, lockTime);
+    }
+
+    private String ticketLevelName(Long areaId, int price) {
+        List<String> names = jdbcTemplate.queryForList("select name from venue_area where id=? and deleted=0", String.class, areaId);
+        String areaName = names.isEmpty() ? "票档" : names.get(0);
+        return areaName + price;
     }
 
     private void ensureSessionSeats(Long sessionId, Long venueId) {
@@ -537,10 +543,15 @@ public class PersistentPerformanceService {
         if (existing != null && existing > 0) {
             jdbcTemplate.update("""
                     update session_seat ss
-                    join ticket_level tl on tl.session_id=ss.session_id and tl.area_id=ss.area_id and tl.deleted=0
+                    join (
+                      select session_id, area_id, min(id) id
+                      from ticket_level
+                      where session_id=? and deleted=0
+                      group by session_id, area_id
+                    ) tl on tl.session_id=ss.session_id and tl.area_id=ss.area_id
                     set ss.ticket_level_id=tl.id, ss.updated_at=now()
                     where ss.session_id=? and ss.status in ('AVAILABLE', 'UNRELEASED', 'DISABLED')
-                    """, sessionId);
+                    """, sessionId, sessionId);
             return;
         }
         jdbcTemplate.update("""
@@ -551,7 +562,12 @@ public class PersistentPerformanceService {
                        case when s.is_disabled=1 then 'DISABLED' else 'AVAILABLE' end,
                        null, null, s.seat_label, s.x, s.y, now(), now()
                 from seat s
-                left join ticket_level tl on tl.session_id=? and tl.area_id=s.area_id and tl.deleted=0
+                left join (
+                  select session_id, area_id, min(id) id
+                  from ticket_level
+                  where session_id=? and deleted=0
+                  group by session_id, area_id
+                ) tl on tl.area_id=s.area_id
                 where s.venue_id=? and s.deleted=0
                 """, sessionId, sessionId, venueId);
     }
@@ -576,6 +592,8 @@ public class PersistentPerformanceService {
         card.setSaleStatus(rs.getString("status"));
         card.setSaleMode(rs.getString("purchase_mode"));
         card.setPublishStatus(rs.getString("publish_status"));
+        card.setHomeRecommended(rs.getBoolean("home_recommended"));
+        card.setHomeSort(rs.getInt("home_sort"));
         card.setTags(splitTags(rs.getString("service_tags")));
         card.setSummary(rs.getString("summary"));
         card.setIntro(rs.getString("introduction"));
@@ -788,6 +806,14 @@ public class PersistentPerformanceService {
         Object value = payload.get(key);
         if (value == null || String.valueOf(value).isBlank()) return fallback;
         return new BigDecimal(String.valueOf(value)).intValue();
+    }
+
+    private boolean boolValue(Map<String, Object> payload, String key, boolean fallback) {
+        Object value = payload.get(key);
+        if (value == null || String.valueOf(value).isBlank()) return fallback;
+        if (value instanceof Boolean b) return b;
+        String text = String.valueOf(value);
+        return "1".equals(text) || "true".equalsIgnoreCase(text) || "yes".equalsIgnoreCase(text);
     }
 
     private BigDecimal decimalValue(Map<String, Object> payload, String key, BigDecimal fallback) {

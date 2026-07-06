@@ -12,7 +12,13 @@
           </el-form-item>
           <el-form-item label="票档">
             <el-select v-model="form.ticketLevelId" placeholder="请选择票档">
-              <el-option v-for="level in ticketLevels" :key="level.id" :label="`${level.name} ¥${level.price}`" :value="level.id" />
+              <el-option
+                v-for="level in ticketLevels"
+                :key="level.id"
+                :label="`${level.name} ¥${level.price}${level.availableStock <= 0 ? '（售罄）' : ''}`"
+                :value="level.id"
+                :disabled="saleStatus.status === 'ON_SALE' && level.availableStock <= 0"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="数量">
@@ -44,7 +50,7 @@ import { ElMessage } from 'element-plus'
 import SectionHeader from '../components/SectionHeader.vue'
 import { getActiveBatch, getPerformance, getPerformanceSessions, getSessionSaleStatus, getSessionTicketLevels } from '../api/portal'
 import { getViewers } from '../api/auth'
-import { createReservation, submitRush } from '../api/ticketFlow'
+import { createReservation, getLatestReservation, submitRush } from '../api/ticketFlow'
 
 const route = useRoute()
 const router = useRouter()
@@ -65,13 +71,13 @@ const modeText = computed(() => ({
   STANDING: '站席购票'
 }[selectedSession.value?.purchaseMode] || '请选择场次'))
 const saleStatusText = computed(() => ({
-  RESERVABLE: '即将开售，可先预约',
-  ON_SALE: '正在售卖',
-  SOLD_OUT: '缺货中',
+  COMING_SOON: '即将开售，可先预约',
+  ON_SALE: '热卖中',
+  SOLD_OUT: '已售罄',
   ENDED: '已结束',
   UNAVAILABLE: '暂不可售'
 }[saleStatus.value.status] || '请选择场次'))
-const submitText = computed(() => saleStatus.value.status === 'ON_SALE' ? '提交抢票' : '提交预约')
+const submitText = computed(() => saleStatus.value.status === 'ON_SALE' ? '立即购票' : '预约抢票')
 const submitDisabled = computed(() => !form.sessionId || !form.ticketLevelId || ['SOLD_OUT', 'ENDED', 'UNAVAILABLE'].includes(saleStatus.value.status))
 
 const loadLevels = async () => {
@@ -82,8 +88,21 @@ const loadLevels = async () => {
   ])
   ticketLevels.value = levels
   saleStatus.value = status
-  form.ticketLevelId = ticketLevels.value[0]?.id || null
+  form.ticketLevelId = ticketLevels.value.find((level) => saleStatus.value.status !== 'ON_SALE' || level.availableStock > 0)?.id || null
   batch.value = await getActiveBatch(form.sessionId)
+}
+
+const applyLatestReservation = async () => {
+  if (route.query.mode === 'reservation') return
+  const latest = await getLatestReservation({ performanceId: route.params.id })
+  if (!latest?.sessionId) return
+  form.sessionId = latest.sessionId
+  await loadLevels()
+  if (ticketLevels.value.some((level) => level.id === latest.ticketLevelId)) {
+    form.ticketLevelId = latest.ticketLevelId
+  }
+  form.quantity = latest.quantity || 1
+  form.viewerIds = Array.isArray(latest.viewerIds) ? latest.viewerIds : []
 }
 
 const submit = async () => {
@@ -129,5 +148,6 @@ onMounted(async () => {
   form.sessionId = Number(route.query.sessionId) || sessions.value[0]?.id || null
   form.viewerIds = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id)
   await loadLevels()
+  await applyLatestReservation()
 })
 </script>

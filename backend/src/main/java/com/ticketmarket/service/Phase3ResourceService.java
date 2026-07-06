@@ -410,7 +410,11 @@ public class Phase3ResourceService {
     public List<Map<String, Object>> frontTicketLevels(Long sessionId) {
         Map<String, Object> saleStatus = frontSaleStatus(sessionId);
         String status = String.valueOf(saleStatus.get("status"));
-        return ticketLevels(sessionId).stream().peek(row -> row.put("frontStatus", ticketLevelFrontStatus(row, status))).toList();
+        Long batchId = saleStatus.get("batchId") == null ? null : Long.valueOf(String.valueOf(saleStatus.get("batchId")));
+        return ticketLevels(sessionId).stream().peek(row -> {
+            row.put("availableStock", batchId == null ? 0 : stockFor(batchId, row));
+            row.put("frontStatus", ticketLevelFrontStatus(row, status));
+        }).toList();
     }
 
     public Map<String, Object> ticketLevel(Long id) {
@@ -418,8 +422,9 @@ public class Phase3ResourceService {
     }
 
     public Map<String, Object> createTicketLevel(Map<String, Object> payload) {
-        int totalStock = intValue(payload, "totalStock", 0);
-        int releasedStock = intValue(payload, "releasedStock", 0);
+        Long areaId = longValue(payload, "areaId", null);
+        BigDecimal price = decimalValue(payload, "price", "180");
+        int totalStock = intValue(payload, "stock", intValue(payload, "totalStock", 0));
         jdbcTemplate.update("""
                 insert into ticket_level
                 (session_id, name, area_id, price, total_stock, released_stock, unreleased_stock, sold_stock,
@@ -427,28 +432,31 @@ public class Phase3ResourceService {
                 values (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'ENABLED', now(), now(), 0)
                 """,
                 longValue(payload, "sessionId", 1001L),
-                str(payload, "name", "标准票"),
-                longValue(payload, "areaId", null),
-                decimalValue(payload, "price", "180"),
+                autoTicketLevelName(areaId, price),
+                areaId,
+                price,
                 totalStock,
-                releasedStock,
-                intValue(payload, "unreleasedStock", Math.max(0, totalStock - releasedStock))
+                totalStock,
+                0
         );
         return ticketLevel(lastId());
     }
 
     public Map<String, Object> updateTicketLevel(Long id, Map<String, Object> payload) {
         ticketLevel(id);
+        Long areaId = longValue(payload, "areaId", null);
+        BigDecimal price = decimalValue(payload, "price", "180");
+        int stock = intValue(payload, "stock", intValue(payload, "totalStock", 0));
         jdbcTemplate.update("""
                 update ticket_level set name=?, area_id=?, price=?, total_stock=?, released_stock=?, unreleased_stock=?, status=?, updated_at=now()
                 where id=? and deleted=0
                 """,
-                str(payload, "name", ""),
-                longValue(payload, "areaId", null),
-                decimalValue(payload, "price", "180"),
-                intValue(payload, "totalStock", 0),
-                intValue(payload, "releasedStock", 0),
-                intValue(payload, "unreleasedStock", 0),
+                autoTicketLevelName(areaId, price),
+                areaId,
+                price,
+                stock,
+                stock,
+                0,
                 str(payload, "status", "ENABLED"),
                 id
         );
@@ -547,6 +555,14 @@ public class Phase3ResourceService {
                 where session_id=? and ticket_level_id=? and status='AVAILABLE'
                 order by y, x, id limit ?
                 """, Long.class, sessionId, ticketLevelId, quantity);
+        if (ids.size() < quantity) {
+            Map<String, Object> level = ticketLevel(ticketLevelId);
+            ids = jdbcTemplate.queryForList("""
+                    select id from session_seat
+                    where session_id=? and area_id=? and status='AVAILABLE'
+                    order by y, x, id limit ?
+                    """, Long.class, sessionId, level.get("areaId"), quantity);
+        }
         if (ids.size() < quantity) throw new ApiException(409, "可售座位不足，请调整票档或数量");
         return lockSessionSeats(sessionId, ids, userId, batchId, 5);
     }
@@ -662,18 +678,31 @@ public class Phase3ResourceService {
     public Map<String, Object> frontSaleStatus(Long sessionId) {
         refreshBatchStatus();
         Map<String, Object> batch = frontBatch(sessionId);
-        if (batch == null) return map("status", "ENDED", "buttonText", "暂无可售", "clickable", false, "hasStock", false);
+        if (batch == null) return map("status", "ENDED", "buttonText", "已结束", "clickable", false, "hasStock", false);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime saleStart = parseTime(String.valueOf(batch.get("saleStartTime")));
         LocalDateTime lockTime = parseTime(String.valueOf(batch.get("lockTime")));
         boolean hasStock = hasFrontStock(batch);
-        if (now.isBefore(saleStart)) return frontStatus(batch, "RESERVABLE", "预约抢票", true, hasStock);
+        if (now.isBefore(saleStart)) return frontStatus(batch, "COMING_SOON", "预约抢票", true, hasStock);
         if (!now.isBefore(lockTime) || "LOCKED".equals(batch.get("status"))) {
             boolean hasNext = hasFutureBatch(sessionId, now);
-            return frontStatus(batch, hasNext ? "RESERVABLE" : "ENDED", hasNext ? "预约抢票" : "已结束", hasNext, false);
+            return frontStatus(batch, hasNext ? "COMING_SOON" : "ENDED", hasNext ? "预约抢票" : "已结束", hasNext, false);
         }
-        if (!hasStock) return frontStatus(batch, "SOLD_OUT", "缺货中", false, false);
+        if (!hasStock) return frontStatus(batch, "SOLD_OUT", "已售罄", false, false);
         return frontStatus(batch, "ON_SALE", "立即购票", true, true);
+    }
+
+    public Map<String, Object> frontPerformanceStatus(Long performanceId) {
+        List<Map<String, Object>> sessionStatuses = sessionsByPerformance(performanceId).stream()
+                .map(session -> frontSaleStatus((Long) session.get("id")))
+                .toList();
+        if (sessionStatuses.isEmpty()) {
+            return map("status", "COMING_SOON", "frontStatus", "COMING_SOON", "buttonText", "预约抢票", "clickable", false, "hasStock", false);
+        }
+        return sessionStatuses.stream().filter(status -> "ON_SALE".equals(status.get("status"))).findFirst()
+                .or(() -> sessionStatuses.stream().filter(status -> "COMING_SOON".equals(status.get("status"))).findFirst())
+                .or(() -> sessionStatuses.stream().filter(status -> "SOLD_OUT".equals(status.get("status"))).findFirst())
+                .orElse(sessionStatuses.get(0));
     }
 
     public void assertFrontSaleOpen(Long sessionId, Long batchId) {
@@ -701,10 +730,10 @@ public class Phase3ResourceService {
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map<String, Object> level : ticketLevels(sessionId)) {
             String key = redisStockKey(batchId, (Long) level.get("id"));
-            int releaseQuantity = intValue(batch, "releaseQuantity", 0);
             int released = intValue(level, "releasedStock", 0);
             int sold = intValue(level, "soldStock", 0);
-            int stock = Math.max(0, Math.min(released, releaseQuantity == 0 ? released : releaseQuantity) - sold);
+            int locked = intValue(level, "lockedStock", 0);
+            int stock = Math.max(0, released - sold - locked);
             redisTemplate.opsForValue().set(key, String.valueOf(stock));
             result.put(key, stock);
         }
@@ -963,15 +992,21 @@ public class Phase3ResourceService {
     private int stockFor(Long batchId, Map<String, Object> level) {
         String redisStock = redisTemplate.opsForValue().get(redisStockKey(batchId, (Long) level.get("id")));
         if (redisStock != null && !redisStock.isBlank()) return Math.max(0, Integer.parseInt(redisStock));
-        Map<String, Object> batch = saleBatch(batchId);
-        int releaseQuantity = intValue(batch, "releaseQuantity", 0);
         int released = intValue(level, "releasedStock", 0);
         int sold = intValue(level, "soldStock", 0);
-        return Math.max(0, Math.min(released, releaseQuantity == 0 ? released : releaseQuantity) - sold);
+        int locked = intValue(level, "lockedStock", 0);
+        return Math.max(0, released - sold - locked);
+    }
+
+    private String autoTicketLevelName(Long areaId, BigDecimal price) {
+        if (areaId == null) return "票档" + price.stripTrailingZeros().toPlainString();
+        List<Map<String, Object>> rows = rows("select name areaName from venue_area where id=? and deleted=0", areaId);
+        String areaName = rows.isEmpty() ? "票档" : String.valueOf(rows.get(0).get("areaName"));
+        return areaName + price.stripTrailingZeros().toPlainString();
     }
 
     private String ticketLevelFrontStatus(Map<String, Object> level, String saleStatus) {
-        if ("RESERVABLE".equals(saleStatus)) return "暂未开售";
+        if ("COMING_SOON".equals(saleStatus)) return "暂未开售";
         if (!"ON_SALE".equals(saleStatus)) return "不可售";
         int stock = stockFor((Long) frontSaleStatus((Long) level.get("sessionId")).get("batchId"), level);
         if (stock <= 0) return "缺货";

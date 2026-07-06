@@ -103,9 +103,11 @@ const selectedSession = ref(null)
 const selectedSaleStatus = ref({})
 
 const statusMap = {
-  ON_SALE: '正在售票',
+  ON_SALE: '热卖中',
   COMING_SOON: '即将开售',
-  RETURNED: '正在售卖',
+  SOLD_OUT: '已售罄',
+  ENDED: '已结束',
+  RETURNED: '热卖中',
   LOCKED: '已结束'
 }
 const modeMap = {
@@ -115,7 +117,7 @@ const modeMap = {
   STANDING: '站席'
 }
 
-const statusText = computed(() => statusMap[detail.value?.saleStatus] || '')
+const statusText = computed(() => statusMap[selectedSaleStatus.value.status] || statusMap[detail.value?.saleStatus] || '')
 const modeText = computed(() => modeMap[detail.value?.saleMode] || '')
 const detailBlocks = computed(() => detail.value?.detailBlocks || [])
 const modeLabel = (mode) => modeMap[mode] || mode
@@ -123,9 +125,9 @@ const actionText = computed(() => selectedSaleStatus.value.buttonText || '请选
 const buyDisabled = computed(() => !selectedSaleStatus.value.clickable)
 const saleStatusDescription = computed(() => {
   const status = selectedSaleStatus.value.status
-  if (status === 'RESERVABLE') return `开售时间：${selectedSaleStatus.value.saleStartTime || selectedSession.value?.saleStartTime}`
-  if (status === 'ON_SALE') return '当前场次正在售卖，请按需选择票档和观演人。'
-  if (status === 'SOLD_OUT') return '当前票档紧张，可稍后再查看。'
+  if (status === 'COMING_SOON') return `开售时间：${selectedSaleStatus.value.saleStartTime || selectedSession.value?.saleStartTime}`
+  if (status === 'ON_SALE') return '当前场次热卖中，可直接购票，也可以沿用最近一次预约信息。'
+  if (status === 'SOLD_OUT') return '当前场次已售罄，如有退票回流且未锁票会自动恢复热卖。'
   if (status === 'ENDED') return '当前场次售卖已结束。'
   return '请选择场次查看售卖状态。'
 })
@@ -145,7 +147,7 @@ const buyNow = () => {
     ElMessage.warning('请先选择场次')
     return
   }
-  if (selectedSaleStatus.value.status === 'RESERVABLE') {
+  if (selectedSaleStatus.value.status === 'COMING_SOON') {
     router.push(`/performance/${detail.value.id}/purchase?mode=reservation&sessionId=${selectedSession.value.id}`)
   } else if (selectedSession.value.purchaseMode === 'SELECTABLE') {
     router.push(`/session/${selectedSession.value.id}/seats`)
