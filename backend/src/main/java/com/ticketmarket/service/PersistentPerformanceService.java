@@ -299,7 +299,7 @@ public class PersistentPerformanceService {
         card.setTitle(rs.getString("title"));
         card.setSubtitle(rs.getString("subtitle"));
         card.setCategoryName(rs.getString("category_name"));
-        card.setCategoryCode(rs.getString("category_name"));
+        card.setCategoryCode(categoryCode(rs.getString("category_name")));
         card.setVenueId(longOrNull(rs, "venue_id"));
         card.setCity(rs.getString("city_name"));
         card.setVenue(rs.getString("venue_name"));
@@ -414,6 +414,24 @@ public class PersistentPerformanceService {
     private List<String> splitTags(String value) {
         if (value == null || value.isBlank()) return List.of();
         return Arrays.stream(value.split(",")).map(String::trim).filter(item -> !item.isBlank()).toList();
+    }
+
+    private String categoryCode(String categoryName) {
+        if (categoryName == null) return "";
+        return switch (categoryName) {
+            case "演唱会" -> "concert";
+            case "音乐会" -> "music";
+            case "话剧歌剧" -> "drama";
+            case "体育赛事" -> "sports";
+            case "儿童亲子" -> "family";
+            case "展览休闲" -> "exhibition";
+            case "曲苑杂坛" -> "quyi";
+            case "舞蹈芭蕾" -> "dance";
+            case "二次元" -> "anime";
+            case "旅游展览" -> "travel";
+            case "音乐节" -> "festival";
+            default -> categoryName;
+        };
     }
 
     private void repairStoredImagePaths(Long performanceId) {

@@ -72,16 +72,18 @@ public class PortalController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String status
     ) {
-        String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase();
+        String normalizedKeyword = normalizeSearch(keyword);
         List<PerformanceCard> all = performanceService.publicPerformances();
         List<PerformanceCard> performances = all.stream()
                 .filter(item -> normalizedKeyword.isBlank()
-                        || safe(item.getTitle()).toLowerCase().contains(normalizedKeyword)
-                        || safe(item.getVenue()).toLowerCase().contains(normalizedKeyword)
-                        || safe(item.getAddress()).toLowerCase().contains(normalizedKeyword)
-                        || safe(item.getCity()).toLowerCase().contains(normalizedKeyword)
-                        || safe(item.getCategoryName()).toLowerCase().contains(normalizedKeyword))
-                .filter(item -> city == null || city.isBlank() || safe(item.getCity()).equals(city))
+                        || normalizeSearch(item.getTitle()).contains(normalizedKeyword)
+                        || normalizeSearch(item.getSubtitle()).contains(normalizedKeyword)
+                        || normalizeSearch(item.getSummary()).contains(normalizedKeyword)
+                        || normalizeSearch(item.getVenue()).contains(normalizedKeyword)
+                        || normalizeSearch(item.getAddress()).contains(normalizedKeyword)
+                        || normalizeSearch(item.getCity()).contains(normalizedKeyword)
+                        || normalizeSearch(item.getCategoryName()).contains(normalizedKeyword))
+                .filter(item -> city == null || city.isBlank() || safe(item.getCity()).trim().equals(city.trim()))
                 .filter(item -> category == null || category.isBlank()
                         || safe(item.getCategoryCode()).equals(category)
                         || safe(item.getCategoryName()).equals(category))
@@ -131,5 +133,12 @@ public class PortalController {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private String normalizeSearch(String value) {
+        if (value == null) return "";
+        return value.toLowerCase()
+                .replaceAll("[\\p{P}\\p{S}\\s　]+", "")
+                .trim();
     }
 }

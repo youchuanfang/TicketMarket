@@ -44,7 +44,7 @@ const categories = ref([])
 const items = ref([])
 const city = ref(route.query.city || '')
 const status = ref('')
-const cities = ['上海', '杭州', '南京', '深圳']
+const cities = ref([])
 
 const currentTitle = computed(() => {
   const code = route.params.code || ''
@@ -56,6 +56,7 @@ const load = async () => {
     const code = route.params.code === 'movie' ? '' : route.params.code
     const data = await searchPerformances({ category: code, city: city.value, status: status.value })
     items.value = data.items
+    cities.value = data.filters?.cities || []
   } catch (error) {
     ElMessage.error(error.message)
   }

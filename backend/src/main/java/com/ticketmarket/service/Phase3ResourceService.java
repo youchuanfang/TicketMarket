@@ -474,8 +474,11 @@ public class Phase3ResourceService {
         Map<String, Object> targetSession = session(sessionId);
         Long venueId = (Long) targetSession.get("venueId");
         Integer count = jdbcTemplate.queryForObject("select count(*) from session_seat where session_id=?", Integer.class, sessionId);
-        if (count != null && count > 0) return sessionSeats(sessionId);
         List<Map<String, Object>> levels = ticketLevels(sessionId);
+        if (count != null && count > 0) {
+            refreshSessionSeatTicketLevels(sessionId, levels);
+            return sessionSeats(sessionId);
+        }
         for (Map<String, Object> seat : seats(venueId)) {
             Long areaId = (Long) seat.get("areaId");
             Long levelId = levels.stream()
@@ -495,6 +498,25 @@ public class Phase3ResourceService {
             );
         }
         return sessionSeats(sessionId);
+    }
+
+    private void refreshSessionSeatTicketLevels(Long sessionId, List<Map<String, Object>> levels) {
+        for (Map<String, Object> level : levels) {
+            Object areaId = level.get("areaId");
+            if (areaId == null) continue;
+            jdbcTemplate.update("""
+                    update session_seat
+                    set ticket_level_id=?, updated_at=now()
+                    where session_id=? and area_id=? and status in ('AVAILABLE', 'UNRELEASED', 'DISABLED')
+                    """, level.get("id"), sessionId, areaId);
+        }
+        if (!levels.isEmpty()) {
+            jdbcTemplate.update("""
+                    update session_seat
+                    set ticket_level_id=?, updated_at=now()
+                    where session_id=? and ticket_level_id is null and status in ('AVAILABLE', 'UNRELEASED', 'DISABLED')
+                    """, levels.get(0).get("id"), sessionId);
+        }
     }
 
     public void updateSessionSeatStatus(List<Long> ids, String status) {
