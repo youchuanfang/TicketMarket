@@ -12,7 +12,13 @@
           </el-form-item>
           <el-form-item label="票档">
             <el-select v-model="form.ticketLevelId" placeholder="请选择票档">
-              <el-option v-for="level in ticketLevels" :key="level.id" :label="`${level.name} ¥${level.price}`" :value="level.id" />
+              <el-option
+                v-for="level in ticketLevels"
+                :key="level.id"
+                :label="`${level.name} ¥${level.price}${level.availableStock <= 0 ? '（售罄）' : ''}`"
+                :value="level.id"
+                :disabled="saleStatus.status === 'ON_SALE' && level.availableStock <= 0"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="数量">
@@ -82,7 +88,7 @@ const loadLevels = async () => {
   ])
   ticketLevels.value = levels
   saleStatus.value = status
-  form.ticketLevelId = ticketLevels.value[0]?.id || null
+  form.ticketLevelId = ticketLevels.value.find((level) => saleStatus.value.status !== 'ON_SALE' || level.availableStock > 0)?.id || null
   batch.value = await getActiveBatch(form.sessionId)
 }
 

@@ -31,24 +31,13 @@
       </div>
     </section>
 
-    <section class="split-band">
-      <div>
-        <SectionHeader title="即将开售" to="/search?status=COMING_SOON" />
-        <div class="compact-list">
-          <RouterLink v-for="item in home.comingSoon" :key="item.id" :to="`/performances/${item.id}`" class="compact-item">
-            <span>{{ item.title }}</span>
-            <strong>{{ item.startTime }}</strong>
-          </RouterLink>
-        </div>
-      </div>
-      <div>
-        <SectionHeader title="库存动态" to="/search?status=SOLD_OUT" />
-        <div class="compact-list">
-          <RouterLink v-for="item in home.returned" :key="item.id" :to="`/performances/${item.id}`" class="compact-item warning">
-            <span>{{ item.title }}</span>
-            <strong>{{ item.saleStatus === 'ENDED' ? '已结束' : '已售罄' }}</strong>
-          </RouterLink>
-        </div>
+    <section class="content-band">
+      <SectionHeader title="即将开售" to="/search?status=COMING_SOON" />
+      <div class="compact-list">
+        <RouterLink v-for="item in home.comingSoon" :key="item.id" :to="`/performances/${item.id}`" class="compact-item">
+          <span>{{ item.title }}</span>
+          <strong>{{ item.startTime }}</strong>
+        </RouterLink>
       </div>
     </section>
 
@@ -56,6 +45,13 @@
       <SectionHeader title="热卖中" to="/search?status=ON_SALE" />
       <div class="event-grid">
         <PerformanceCard v-for="item in home.onSale" :key="item.id" :item="item" />
+      </div>
+    </section>
+
+    <section v-for="section in home.categorySections" :key="section.code" class="content-band">
+      <SectionHeader :title="section.name" :to="`/category/${section.code}`" />
+      <div class="event-grid">
+        <PerformanceCard v-for="item in section.items" :key="item.id" :item="item" />
       </div>
     </section>
 
@@ -97,7 +93,7 @@ const home = reactive({
   hot: [],
   comingSoon: [],
   onSale: [],
-  returned: [],
+  categorySections: [],
   movies: [],
   hotCities: [],
   hotVenues: []

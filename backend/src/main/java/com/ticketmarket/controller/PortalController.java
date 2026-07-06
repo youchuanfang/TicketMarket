@@ -5,6 +5,7 @@ import com.ticketmarket.model.Category;
 import com.ticketmarket.model.MovieCard;
 import com.ticketmarket.model.PerformanceCard;
 import com.ticketmarket.service.DemoDataService;
+import com.ticketmarket.service.PersistentMovieService;
 import com.ticketmarket.service.PersistentPerformanceService;
 import com.ticketmarket.service.Phase3ResourceService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,22 +25,37 @@ import java.util.Objects;
 public class PortalController {
     private final DemoDataService dataService;
     private final PersistentPerformanceService performanceService;
+    private final PersistentMovieService movieService;
     private final Phase3ResourceService resourceService;
 
-    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService, Phase3ResourceService resourceService) {
+    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService, PersistentMovieService movieService, Phase3ResourceService resourceService) {
         this.dataService = dataService;
         this.performanceService = performanceService;
+        this.movieService = movieService;
         this.resourceService = resourceService;
     }
 
     @GetMapping("/home")
     public Result<Map<String, Object>> home() {
         List<PerformanceCard> all = performanceService.publicPerformances().stream().map(this::withRealtimeSaleStatus).toList();
-        List<PerformanceCard> hot = all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(5).toList();
-        List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(4).toList();
-        List<PerformanceCard> inventoryUpdates = all.stream()
-                .filter(item -> "SOLD_OUT".equals(item.getSaleStatus()) || "ENDED".equals(item.getSaleStatus()))
-                .limit(4)
+        List<PerformanceCard> featured = all.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getHomeRecommended()))
+                .sorted(Comparator.comparing(item -> item.getHomeSort() == null ? 0 : item.getHomeSort()))
+                .limit(8)
+                .toList();
+        List<PerformanceCard> hot = featured.isEmpty()
+                ? all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(8).toList()
+                : featured;
+        List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(6).toList();
+        List<Map<String, Object>> categorySections = dataService.categories().stream()
+                .filter(category -> !"movie".equals(category.code()))
+                .map(category -> Map.<String, Object>of(
+                        "code", category.code(),
+                        "name", category.name(),
+                        "items", all.stream().filter(item -> Objects.equals(item.getCategoryCode(), category.code())).limit(4).toList()
+                ))
+                .filter(section -> !((List<?>) section.get("items")).isEmpty())
+                .limit(6)
                 .toList();
         List<String> hotCities = allCities(all);
         List<String> hotVenues = distinctPerformanceValues(all, false);
@@ -53,10 +69,10 @@ public class PortalController {
                 "hot", hot,
                 "comingSoon", coming,
                 "onSale", hot,
-                "returned", inventoryUpdates,
+                "categorySections", categorySections,
                 "hotCities", hotCities.isEmpty() ? List.of("上海", "杭州", "南京", "深圳", "北京") : hotCities,
                 "hotVenues", hotVenues.isEmpty() ? List.of("滨江音乐中心", "湖畔剧院", "紫金艺术厅", "云顶体育馆") : hotVenues,
-                "movies", dataService.movies().stream().limit(5).toList()
+                "movies", movieService.movies().stream().limit(6).toList()
         ));
     }
 
@@ -107,7 +123,7 @@ public class PortalController {
 
     @GetMapping("/movies/{id}")
     public Result<MovieCard> movieDetail(@PathVariable Long id) {
-        return Result.ok(dataService.movie(id));
+        return Result.ok(movieService.movie(id));
     }
 
     private List<String> allCities(List<PerformanceCard> performances) {

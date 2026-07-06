@@ -30,6 +30,8 @@ public class PerformanceCard {
     private String refundRule;
     private String entryRule;
     private String publishStatus;
+    private Boolean homeRecommended;
+    private Integer homeSort;
     private List<Map<String, Object>> detailBlocks;
     private List<SessionOption> sessions;
     private List<TicketLevel> ticketLevels;
@@ -243,6 +245,22 @@ public class PerformanceCard {
 
     public void setPublishStatus(String publishStatus) {
         this.publishStatus = publishStatus;
+    }
+
+    public Boolean getHomeRecommended() {
+        return homeRecommended;
+    }
+
+    public void setHomeRecommended(Boolean homeRecommended) {
+        this.homeRecommended = homeRecommended;
+    }
+
+    public Integer getHomeSort() {
+        return homeSort;
+    }
+
+    public void setHomeSort(Integer homeSort) {
+        this.homeSort = homeSort;
     }
 
     public List<Map<String, Object>> getDetailBlocks() {
