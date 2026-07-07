@@ -28,7 +28,7 @@ export const adminApi = {
   uploadImage: (file) => {
     const formData = new FormData()
     formData.append('file', file)
-    return http.post('/api/admin/upload/image', formData)
+    return http.post('/api/admin/upload/image', formData, { timeout: 120000 })
   },
   uploadLocalImage: (path) => http.post('/api/admin/upload/local-image', { path }),
   venues: () => http.get('/api/admin/venues'),
