@@ -311,14 +311,15 @@ public class PersistentPerformanceService {
     }
 
     private void syncPublishingResources(Long performanceId, Map<String, Object> payload) {
+        if (!hasPublishingPayload(payload)) return;
         List<String> dates = publishingDates(payload);
         List<Map<String, Object>> levels = publishingTicketLevels(payload);
-        Set<Timestamp> desiredTimes = dates.stream()
-                .map(value -> Timestamp.valueOf(LocalDateTime.parse(value, FORMATTER)))
+        Set<LocalDateTime> desiredTimes = dates.stream()
+                .map(value -> LocalDateTime.parse(value, FORMATTER))
                 .collect(Collectors.toSet());
         for (Map<String, Object> session : jdbcTemplate.queryForList(
                 "select id, start_time from performance_session where performance_id=? and deleted=0", performanceId)) {
-            Timestamp start = (Timestamp) session.get("start_time");
+            LocalDateTime start = localDateTime(session.get("start_time"));
             if (!desiredTimes.contains(start)) {
                 jdbcTemplate.update("update performance_session set deleted=1, updated_at=now() where id=?", session.get("id"));
             }
@@ -363,8 +364,13 @@ public class PersistentPerformanceService {
         for (String line : str(payload, "sessionDatesText", "").split("\\R")) {
             addDate(values, line);
         }
-        if (values.isEmpty()) addDate(values, str(payload, "startTime", ""));
         return values.stream().distinct().toList();
+    }
+
+    private boolean hasPublishingPayload(Map<String, Object> payload) {
+        return payload.containsKey("sessionDates")
+                || payload.containsKey("sessionDatesText")
+                || payload.containsKey("quickTicketLevels");
     }
 
     @SuppressWarnings("unchecked")
@@ -382,6 +388,12 @@ public class PersistentPerformanceService {
         List<String> dates = publishingDates(payload);
         if (dates.isEmpty()) return timeValue(payload, "startTime", null);
         return Timestamp.valueOf(LocalDateTime.parse(dates.stream().sorted().findFirst().orElse(dates.get(0)), FORMATTER));
+    }
+
+    private LocalDateTime localDateTime(Object value) {
+        if (value instanceof LocalDateTime time) return time;
+        if (value instanceof Timestamp timestamp) return timestamp.toLocalDateTime();
+        return LocalDateTime.parse(String.valueOf(value).replace('T', ' ').substring(0, 19), FORMATTER);
     }
 
     private BigDecimal derivedPrice(Map<String, Object> payload, boolean min) {

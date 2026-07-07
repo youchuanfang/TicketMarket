@@ -1370,6 +1370,16 @@ button {
   border-top: 1px solid var(--line);
 }
 
+.detail-builder .table-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  gap: 12px;
+  padding: 10px 0;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
 .detail-builder h3 {
   margin: 0;
 }
@@ -1429,6 +1439,34 @@ button {
 
 .rich-control {
   width: 132px;
+}
+
+.rich-font-buttons {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.rich-font-buttons button {
+  min-width: 38px;
+  height: 32px;
+  padding: 0 8px;
+  color: #334155;
+  background: #fff;
+  border: 0;
+  border-right: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.rich-font-buttons button:last-child {
+  border-right: 0;
+}
+
+.rich-font-buttons button:hover {
+  color: var(--brand);
+  background: #fff5f6;
 }
 
 .rich-image-size-control {

@@ -601,6 +601,13 @@
               <el-option label="大号 22px" :value="22" />
               <el-option label="标题 28px" :value="28" />
             </el-select>
+            <div class="rich-font-buttons" aria-label="常用字号">
+              <button type="button" @mousedown.prevent @click="setRichFontSize(14)">14</button>
+              <button type="button" @mousedown.prevent @click="setRichFontSize(16)">16</button>
+              <button type="button" @mousedown.prevent @click="setRichFontSize(18)">18</button>
+              <button type="button" @mousedown.prevent @click="setRichFontSize(22)">22</button>
+              <button type="button" @mousedown.prevent @click="setRichFontSize(28)">28</button>
+            </div>
             <div class="rich-image-size-control">
               <span>图片宽度</span>
               <el-slider v-model="richImageWidth" :min="20" :max="100" :step="5" :disabled="!selectedRichImage" @change="applyRichImageWidth" />
@@ -797,7 +804,7 @@
 </template>
 
 <script setup>
-import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { http } from '../api/http'
@@ -1385,6 +1392,25 @@ function rememberRichSelection() {
   }
 }
 
+function handleDocumentSelectionChange() {
+  rememberRichSelection()
+}
+
+function selectionInsideRichEditor(selection = window.getSelection()) {
+  if (!selection?.rangeCount || !detailEditorRef.value) return false
+  return detailEditorRef.value.contains(selection.getRangeAt(0).commonAncestorContainer)
+}
+
+function restoreRichSelection() {
+  if (!savedRichRange.value || !detailEditorRef.value) return false
+  if (!detailEditorRef.value.contains(savedRichRange.value.commonAncestorContainer)) return false
+  detailEditorRef.value.focus()
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(savedRichRange.value)
+  return true
+}
+
 function applyRichImageWidth() {
   const image = selectedRichImage.value
   if (!image || !detailEditorRef.value?.contains(image)) return
@@ -1396,11 +1422,14 @@ function applyRichImageWidth() {
 function applyRichFontSize() {
   const size = Number(richFontSize.value || 16)
   const selection = window.getSelection()
-  if ((!selection?.rangeCount || selection.isCollapsed) && savedRichRange.value) {
-    selection?.removeAllRanges()
-    selection?.addRange(savedRichRange.value)
+  if (!selectionInsideRichEditor(selection) || selection.isCollapsed) {
+    restoreRichSelection()
   }
   const activeSelection = window.getSelection()
+  if (!selectionInsideRichEditor(activeSelection)) {
+    ElMessage.info('请先选中详情正文里的文字')
+    return
+  }
   if (!activeSelection?.rangeCount || activeSelection.isCollapsed) {
     const block = richBlockFromNode(activeSelection?.anchorNode || savedRichRange.value?.commonAncestorContainer)
     if (block && detailEditorRef.value?.contains(block)) {
@@ -1418,7 +1447,13 @@ function applyRichFontSize() {
     span.innerHTML = node.innerHTML
     node.replaceWith(span)
   })
+  rememberRichSelection()
   syncRichEditor()
+}
+
+function setRichFontSize(size) {
+  richFontSize.value = size
+  applyRichFontSize()
 }
 
 function richBlockFromNode(node) {
@@ -2036,6 +2071,12 @@ async function logout() {
 }
 
 watch(() => route.fullPath, () => loadAll())
-onMounted(() => loadAll())
+onMounted(() => {
+  document.addEventListener('selectionchange', handleDocumentSelectionChange)
+  loadAll()
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('selectionchange', handleDocumentSelectionChange)
+})
 </script>
 
