@@ -92,6 +92,7 @@
               <el-button link type="primary" @click="openPerformance(row)">编辑全部细节</el-button>
               <RouterLink class="table-link" :to="`/performances/${row.id}`">预览</RouterLink>
               <el-button link type="danger" @click="unpublishPerformance(row)">下架</el-button>
+              <el-button link type="danger" @click="deletePerformance(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -560,7 +561,7 @@
         <el-form-item label="海报" class="span-2">
           <div class="upload-row">
             <img v-if="assetUrl(performanceForm.poster)" :src="assetUrl(performanceForm.poster)" alt="海报预览" class="poster-preview" />
-            <input type="file" accept="image/*" @change="setPerformancePoster" />
+            <input type="file" accept="image/*" :disabled="uploadingPoster" @change="setPerformancePoster" />
             <el-input v-model="performanceForm.poster" placeholder="也可以直接填写图片地址或 D:\desktop\poster.png" @change="importPerformancePosterIfLocal" />
             <el-button @click="importPerformancePoster">导入本机路径</el-button>
           </div>
@@ -594,8 +595,7 @@
           <div class="head-actions">
             <el-button @click="insertRichHeading">标题</el-button>
             <el-button @click="insertRichParagraph">文字</el-button>
-            <input ref="richImageInputRef" type="file" accept="image/*" class="hidden-input" @change="insertRichImageFile" />
-            <el-button @click="richImageInputRef?.click()">图片</el-button>
+            <input ref="richImageInputRef" type="file" accept="image/*" multiple :disabled="uploadingRichImages" @change="insertRichImageFile" />
             <el-input v-model="richImagePath" placeholder="图片地址或本机路径" class="rich-image-path" />
             <el-button @click="insertRichImagePath">插入图片地址</el-button>
           </div>
@@ -605,6 +605,7 @@
           class="rich-editor"
           contenteditable="true"
           @input="syncRichEditor"
+          @keydown="handleRichEditorKeydown"
           @blur="syncRichEditor"
         />
       </div>
@@ -872,6 +873,8 @@ const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowSt
 const detailEditorRef = ref(null)
 const richImageInputRef = ref(null)
 const richImagePath = ref('')
+const uploadingPoster = ref(false)
+const uploadingRichImages = ref(false)
 
 const performanceDialog = ref(false)
 const movieDialog = ref(false)
@@ -1236,16 +1239,24 @@ async function uploadSelectedImage(event, callback) {
   try {
     const result = await adminApi.uploadImage(file)
     callback(result.path)
+    ElMessage.success('图片已上传')
+  } catch (error) {
+    ElMessage.error(error.message || '图片上传失败')
   } finally {
     event.target.value = ''
   }
 }
 
-function setPerformancePoster(event) {
-  uploadSelectedImage(event, (value) => {
-    performanceForm.poster = value
-    performanceForm.banner = value
-  })
+async function setPerformancePoster(event) {
+  uploadingPoster.value = true
+  try {
+    await uploadSelectedImage(event, (value) => {
+      performanceForm.poster = value
+      performanceForm.banner = value
+    })
+  } finally {
+    uploadingPoster.value = false
+  }
 }
 
 function setBlockImage(index, event) {
@@ -1321,6 +1332,58 @@ function rewriteRichImageSources(html) {
   return String(html || '').replace(/src="([^"]+)"/g, (_, src) => `src="${assetUrl(src)}"`)
 }
 
+function richBlockFromNode(node) {
+  let current = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement
+  while (current && current !== detailEditorRef.value) {
+    if (['P', 'DIV', 'H2', 'H3', 'LI'].includes(current.tagName)) return current
+    current = current.parentElement
+  }
+  return null
+}
+
+function isEmptyRichBlock(block) {
+  if (!block || block.querySelector('img')) return false
+  const text = (block.textContent || '').replace(/\u00a0/g, '').trim()
+  const html = block.innerHTML.replace(/<br\s*\/?>/gi, '').replace(/&nbsp;/gi, '').trim()
+  return !text && !html
+}
+
+function placeCaretInEditor(target) {
+  const editor = detailEditorRef.value
+  if (!editor) return
+  const range = document.createRange()
+  const selection = window.getSelection()
+  const node = target && editor.contains(target) ? target : editor
+  range.selectNodeContents(node)
+  range.collapse(false)
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+}
+
+function ensureEditableContent() {
+  const editor = detailEditorRef.value
+  if (!editor) return
+  if (!editor.textContent.trim() && !editor.querySelector('img')) {
+    editor.innerHTML = '<p><br></p>'
+  }
+}
+
+function handleRichEditorKeydown(event) {
+  if (!['Backspace', 'Delete'].includes(event.key)) return
+  const selection = window.getSelection()
+  if (!selection?.rangeCount || !selection.getRangeAt(0).collapsed) return
+  const block = richBlockFromNode(selection.anchorNode)
+  if (!isEmptyRichBlock(block)) return
+  event.preventDefault()
+  const nextTarget = event.key === 'Delete'
+    ? (block.nextElementSibling || block.previousElementSibling)
+    : (block.previousElementSibling || block.nextElementSibling)
+  block.remove()
+  ensureEditableContent()
+  placeCaretInEditor(nextTarget)
+  syncRichEditor()
+}
+
 function insertRichHtml(html) {
   if (!detailEditorRef.value) return
   detailEditorRef.value.focus()
@@ -1346,19 +1409,26 @@ async function insertRichImagePath() {
     const result = await adminApi.uploadLocalImage(path)
     path = result.path
   }
-  insertRichHtml(`<p><img src="${path}" alt="详情图片"></p>`)
+  insertRichHtml(`<p><img src="${assetUrl(path)}" alt="详情图片"></p>`)
   richImagePath.value = ''
   if (!performanceForm.detailImage) performanceForm.detailImage = path
 }
 
 async function insertRichImageFile(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
+  const files = Array.from(event.target.files || [])
+  if (!files.length) return
+  uploadingRichImages.value = true
   try {
-    const result = await adminApi.uploadImage(file)
-    insertRichHtml(`<p><img src="${result.path}" alt="详情图片"></p>`)
-    if (!performanceForm.detailImage) performanceForm.detailImage = result.path
+    for (const file of files) {
+      const result = await adminApi.uploadImage(file)
+      insertRichHtml(`<p><img src="${assetUrl(result.path)}" alt="详情图片"></p>`)
+      if (!performanceForm.detailImage) performanceForm.detailImage = result.path
+    }
+    ElMessage.success(files.length > 1 ? `已插入 ${files.length} 张图片` : '图片已插入')
+  } catch (error) {
+    ElMessage.error(error.message || '详情图片上传失败')
   } finally {
+    uploadingRichImages.value = false
     event.target.value = ''
   }
 }
@@ -1663,6 +1733,17 @@ async function savePerformance() {
 async function unpublishPerformance(row) {
   await adminApi.updatePerformance(row.id, { ...row, publishStatus: 'DRAFT' })
   ElMessage.success('演出已下架为草稿')
+  await loadAll()
+}
+
+async function deletePerformance(row) {
+  await ElMessageBox.confirm(`确定删除演出「${row.title}」吗？删除后前台将不再展示。`, '删除演出', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  await adminApi.deletePerformance(row.id)
+  ElMessage.success('演出已删除')
   await loadAll()
 }
 
