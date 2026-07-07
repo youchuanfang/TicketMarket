@@ -510,11 +510,10 @@
         <el-form-item label="城市"><el-input v-model="performanceForm.city" /></el-form-item>
         <el-form-item label="场馆名称"><el-input v-model="performanceForm.venue" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="performanceForm.address" /></el-form-item>
-        <el-form-item label="首场时间">
-          <el-date-picker v-model="performanceForm.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="选择首场演出时间" />
+        <el-form-item label="演出时间">
+          <el-input :model-value="performanceTimePreview" disabled placeholder="由下方场次自动生成" />
         </el-form-item>
-        <el-form-item label="最低价"><el-input-number v-model="performanceForm.priceMin" :min="0" /></el-form-item>
-        <el-form-item label="最高价"><el-input-number v-model="performanceForm.priceMax" :min="0" /></el-form-item>
+        <el-form-item label="票价区间"><el-input :model-value="performancePricePreview" disabled placeholder="由下方票档自动生成" /></el-form-item>
         <el-form-item label="多场演出时间" class="span-2">
           <div class="session-date-editor">
             <div v-for="(date, index) in performanceForm.sessionDates" :key="index" class="session-date-row">
@@ -595,6 +594,17 @@
           <div class="head-actions">
             <el-button @click="insertRichHeading">标题</el-button>
             <el-button @click="insertRichParagraph">文字</el-button>
+            <el-select v-model="richFontSize" class="rich-control" placeholder="字号" @change="applyRichFontSize">
+              <el-option label="小号 14px" :value="14" />
+              <el-option label="正文 16px" :value="16" />
+              <el-option label="中号 18px" :value="18" />
+              <el-option label="大号 22px" :value="22" />
+              <el-option label="标题 28px" :value="28" />
+            </el-select>
+            <div class="rich-image-size-control">
+              <span>图片宽度</span>
+              <el-slider v-model="richImageWidth" :min="20" :max="100" :step="5" :disabled="!selectedRichImage" @change="applyRichImageWidth" />
+            </div>
             <input ref="richImageInputRef" type="file" accept="image/*" multiple :disabled="uploadingRichImages" @change="insertRichImageFile" />
             <el-input v-model="richImagePath" placeholder="图片地址或本机路径" class="rich-image-path" />
             <el-button @click="insertRichImagePath">插入图片地址</el-button>
@@ -606,6 +616,9 @@
           contenteditable="true"
           @input="syncRichEditor"
           @keydown="handleRichEditorKeydown"
+          @keyup="rememberRichSelection"
+          @mouseup="rememberRichSelection"
+          @click="handleRichEditorClick"
           @blur="syncRichEditor"
         />
       </div>
@@ -873,6 +886,10 @@ const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowSt
 const detailEditorRef = ref(null)
 const richImageInputRef = ref(null)
 const richImagePath = ref('')
+const selectedRichImage = ref(null)
+const richImageWidth = ref(100)
+const richFontSize = ref(16)
+const savedRichRange = ref(null)
 const uploadingPoster = ref(false)
 const uploadingRichImages = ref(false)
 
@@ -963,6 +980,20 @@ const activeHomeSection = computed(() => homepageRecommendations.value.find((ite
 const activeHomeCandidates = computed(() => activeHomeSection.value?.candidates || [])
 const selectedHomeItems = computed(() => activeHomeSection.value?.selected || [])
 const ticketLevelAutoName = computed(() => `${areaName(ticketLevelForm.areaId).replace(/^区域\s*/, '票档')}${Number(ticketLevelForm.price || 0)}`)
+const performanceDateRows = computed(() => (performanceForm.sessionDates || []).map(normalizeDateTime).filter(Boolean).sort())
+const performanceTimePreview = computed(() => {
+  if (!performanceDateRows.value.length) return ''
+  const first = performanceDateRows.value[0]
+  const last = performanceDateRows.value[performanceDateRows.value.length - 1]
+  return first === last ? first : `${first} 至 ${last}`
+})
+const performancePriceRows = computed(() => performanceForm.quickTicketLevels.map((item) => Number(item.price || 0)).filter((value) => value > 0))
+const performancePricePreview = computed(() => {
+  if (!performancePriceRows.value.length) return ''
+  const min = Math.min(...performancePriceRows.value)
+  const max = Math.max(...performancePriceRows.value)
+  return min === max ? `￥${min}` : `￥${min} - ￥${max}`
+})
 const quickAreaOptions = computed(() => {
   const venueType = selectedPerformanceVenue.value?.venueType
   if (venueType === 'STADIUM') {
@@ -1062,18 +1093,15 @@ function emptyPerformance() {
     city: '上海',
     venue: '',
     address: '',
-    startTime: '2026-08-18 19:30:00',
-    priceMin: 180,
-    priceMax: 680,
+    startTime: '',
+    priceMin: 0,
+    priceMax: 0,
     sessionDatesText: '',
-    sessionDates: ['2026-08-18 19:30:00'],
-    quickSaleStartTime: '2026-07-01 10:00:00',
+    sessionDates: [],
+    quickSaleStartTime: '',
     quickLockTime: '',
-    quickTicketLevels: [
-      { areaType: 'SEATED', price: 517, stock: 1000 },
-      { areaType: 'STANDING', price: 1717, stock: 600 }
-    ],
-    poster: '/uploads/posters/performance/poster-101.svg',
+    quickTicketLevels: [],
+    poster: '',
     banner: '',
     detailImage: '',
     saleStatus: 'COMING_SOON',
@@ -1088,9 +1116,9 @@ function emptyPerformance() {
     venueIntro: '',
     purchaseNotice: '',
     refundRule: '',
-    refundFreeUntil: '2026-07-10 19:00:00',
-    refundFeeUntil: '2026-07-10 19:00:00',
-    refundStopTime: '2026-08-18 18:30:00',
+    refundFreeUntil: '',
+    refundFeeUntil: '',
+    refundStopTime: '',
     entryRule: '',
     detailContent: '<h2>项目介绍</h2><p>请在这里编辑详情页内容，可以插入多段文字和多张图片。</p>',
     detailBlocks: [
@@ -1174,7 +1202,8 @@ async function openPerformance(row) {
   const legacyDates = String(next.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime).filter(Boolean)
   next.sessionDates = Array.isArray(next.sessionDates) && next.sessionDates.length
     ? next.sessionDates.map(normalizeDateTime).filter(Boolean)
-    : (legacyDates.length ? legacyDates : [normalizeDateTime(next.startTime || emptyPerformance().startTime)])
+    : (legacyDates.length ? legacyDates : (next.startTime ? [normalizeDateTime(next.startTime)].filter(Boolean) : []))
+  if (!Array.isArray(next.quickTicketLevels)) next.quickTicketLevels = []
   if (!next.detailBlocks?.length) {
     next.detailBlocks = [
       { type: 'HEADING', content: '项目介绍' },
@@ -1325,11 +1354,71 @@ function renderRichEditor() {
   nextTick(() => {
     if (!detailEditorRef.value) return
     detailEditorRef.value.innerHTML = rewriteRichImageSources(performanceForm.detailContent || '')
+    selectedRichImage.value = null
   })
 }
 
 function rewriteRichImageSources(html) {
   return String(html || '').replace(/src="([^"]+)"/g, (_, src) => `src="${assetUrl(src)}"`)
+}
+
+function handleRichEditorClick(event) {
+  rememberRichSelection()
+  const image = event.target?.tagName === 'IMG' ? event.target : null
+  selectedRichImage.value = image
+  if (!image) return
+  const width = image.style.width || image.getAttribute('width') || ''
+  if (String(width).endsWith('%')) {
+    richImageWidth.value = Number.parseInt(width, 10) || 100
+  } else {
+    const parentWidth = image.parentElement?.clientWidth || detailEditorRef.value?.clientWidth || image.clientWidth
+    richImageWidth.value = parentWidth ? Math.round((image.clientWidth / parentWidth) * 100) : 100
+  }
+}
+
+function rememberRichSelection() {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount || !detailEditorRef.value) return
+  const range = selection.getRangeAt(0)
+  if (detailEditorRef.value.contains(range.commonAncestorContainer)) {
+    savedRichRange.value = range.cloneRange()
+  }
+}
+
+function applyRichImageWidth() {
+  const image = selectedRichImage.value
+  if (!image || !detailEditorRef.value?.contains(image)) return
+  image.style.width = `${richImageWidth.value}%`
+  image.style.height = 'auto'
+  syncRichEditor()
+}
+
+function applyRichFontSize() {
+  const size = Number(richFontSize.value || 16)
+  const selection = window.getSelection()
+  if ((!selection?.rangeCount || selection.isCollapsed) && savedRichRange.value) {
+    selection?.removeAllRanges()
+    selection?.addRange(savedRichRange.value)
+  }
+  const activeSelection = window.getSelection()
+  if (!activeSelection?.rangeCount || activeSelection.isCollapsed) {
+    const block = richBlockFromNode(activeSelection?.anchorNode || savedRichRange.value?.commonAncestorContainer)
+    if (block && detailEditorRef.value?.contains(block)) {
+      block.style.fontSize = `${size}px`
+      syncRichEditor()
+      return
+    }
+    ElMessage.info('请先选中文字，或把光标放在需要调整的段落中')
+    return
+  }
+  document.execCommand('fontSize', false, '7')
+  detailEditorRef.value?.querySelectorAll('font[size="7"]').forEach((node) => {
+    const span = document.createElement('span')
+    span.style.fontSize = `${size}px`
+    span.innerHTML = node.innerHTML
+    node.replaceWith(span)
+  })
+  syncRichEditor()
 }
 
 function richBlockFromNode(node) {
@@ -1434,7 +1523,7 @@ async function insertRichImageFile(event) {
 }
 
 function addQuickTicketLevel() {
-  performanceForm.quickTicketLevels.push({ areaType: quickAreaOptions.value[0]?.value || 'SEATED', price: 380, stock: 100 })
+  performanceForm.quickTicketLevels.push({ areaType: quickAreaOptions.value[0]?.value || 'SEATED', price: 0, stock: 0 })
 }
 
 function removeQuickTicketLevel(index) {
@@ -1572,7 +1661,7 @@ async function deleteCinema(row) {
 }
 
 function addSessionDate() {
-  const base = performanceForm.sessionDates.at(-1) || performanceForm.startTime || '2026-08-18 19:30:00'
+  const base = performanceForm.sessionDates.at(-1) || performanceForm.startTime || defaultSessionTime()
   performanceForm.sessionDates.push(addHours(base, 24))
 }
 
@@ -1593,6 +1682,14 @@ function addHours(dateTime, hours) {
   const date = new Date(normalized)
   if (Number.isNaN(date.getTime())) return dateTime
   date.setHours(date.getHours() + hours)
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function defaultSessionTime() {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  date.setHours(19, 30, 0, 0)
   const pad = (value) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
@@ -1629,19 +1726,23 @@ async function ensureQuickArea(venueId, level, index) {
 
 async function createQuickSessionsAndTickets(performance) {
   const rawDates = [
-    normalizeDateTime(performanceForm.startTime),
     ...(performanceForm.sessionDates || []).map(normalizeDateTime),
     ...String(performanceForm.sessionDatesText || '').split(/\r?\n/).map(normalizeDateTime)
   ].filter(Boolean)
   const dateRows = [...new Set(rawDates)]
-  const levels = performanceForm.quickTicketLevels.filter((level) => Number(level.price || 0) > 0 && Number(level.stock || level.totalStock || 0) > 0)
+  const levels = performanceForm.quickTicketLevels.filter((level) => Number(level.price || 0) > 0 && Number(level.stock || level.totalStock || 0) >= 0)
+  const existingSessions = performanceSessions(performance.id)
+  for (const session of existingSessions) {
+    if (!dateRows.includes(normalizeDateTime(session.startTime))) {
+      await adminApi.deleteSession(session.id)
+    }
+  }
   if (!performanceForm.venueId || !dateRows.length || !levels.length) return
   const areasByName = new Map()
   for (let i = 0; i < levels.length; i++) {
     const area = await ensureQuickArea(performanceForm.venueId, levels[i], i)
     areasByName.set(quickAreaName(levels[i]), area)
   }
-  const existingSessions = performanceSessions(performance.id)
   for (const startTime of dateRows) {
     const sessionPayload = {
       performanceId: performance.id,
@@ -1686,8 +1787,12 @@ async function syncSessionTicketLevels(session, levels, areasByName) {
       usedIds.add(matched.id)
       await adminApi.updateTicketLevel(matched.id, { ...matched, ...payload })
     } else {
-      await adminApi.createTicketLevel(payload)
+      const created = await adminApi.createTicketLevel(payload)
+      usedIds.add(created.id)
     }
+  }
+  for (const level of existingLevels) {
+    if (!usedIds.has(level.id)) await adminApi.deleteTicketLevel(level.id)
   }
 }
 
@@ -1714,10 +1819,11 @@ async function savePerformance() {
   syncCategoryName()
   await importPerformancePosterIfLocal()
   const prices = performanceForm.quickTicketLevels.map((item) => Number(item.price || 0)).filter((value) => value > 0)
-  if (prices.length) {
-    performanceForm.priceMin = Math.min(...prices)
-    performanceForm.priceMax = Math.max(...prices)
-  }
+  performanceForm.priceMin = prices.length ? Math.min(...prices) : 0
+  performanceForm.priceMax = prices.length ? Math.max(...prices) : 0
+  const dateRows = [...new Set((performanceForm.sessionDates || []).map(normalizeDateTime).filter(Boolean))].sort()
+  performanceForm.sessionDates = dateRows
+  performanceForm.startTime = dateRows[0] || ''
   const payload = {
     ...clone(performanceForm),
     tags: performanceForm.tagsText.split(',').map((item) => item.trim()).filter(Boolean),
