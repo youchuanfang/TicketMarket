@@ -28,7 +28,7 @@ export const adminApi = {
   uploadImage: (file) => {
     const formData = new FormData()
     formData.append('file', file)
-    return http.post('/api/admin/upload/image', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    return http.post('/api/admin/upload/image', formData)
   },
   uploadLocalImage: (path) => http.post('/api/admin/upload/local-image', { path }),
   venues: () => http.get('/api/admin/venues'),
