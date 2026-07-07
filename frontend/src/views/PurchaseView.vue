@@ -7,7 +7,13 @@
         <el-form label-position="top">
           <el-form-item label="场次">
             <el-select v-model="form.sessionId" placeholder="请选择场次" @change="loadLevels">
-              <el-option v-for="session in sessions" :key="session.id" :label="session.sessionName" :value="session.id" />
+              <el-option
+                v-for="session in sessions"
+                :key="session.id"
+                :label="`${session.sessionName} ${sessionStatusLabel(session)}`"
+                :value="session.id"
+                :disabled="isSessionDisabled(session)"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="票档">
@@ -79,6 +85,17 @@ const saleStatusText = computed(() => ({
 }[saleStatus.value.status] || '请选择场次'))
 const submitText = computed(() => saleStatus.value.status === 'ON_SALE' ? '立即购票' : '预约抢票')
 const submitDisabled = computed(() => !form.sessionId || !form.ticketLevelId || ['SOLD_OUT', 'ENDED', 'UNAVAILABLE'].includes(saleStatus.value.status))
+const isSessionDisabled = (session) => ['SOLD_OUT', 'ENDED', 'UNAVAILABLE'].includes(session.saleStatus)
+const sessionStatusLabel = (session) => {
+  const text = ({
+    COMING_SOON: '即将开售',
+    ON_SALE: '热卖中',
+    SOLD_OUT: '已售罄',
+    ENDED: '已结束',
+    UNAVAILABLE: '暂不可售'
+  })[session.saleStatus]
+  return text ? `（${text}）` : ''
+}
 
 const loadLevels = async () => {
   if (!form.sessionId) return
@@ -143,9 +160,16 @@ const goSeat = () => {
 
 onMounted(async () => {
   performance.value = await getPerformance(route.params.id)
-  sessions.value = await getPerformanceSessions(route.params.id)
+  const sessionRows = await getPerformanceSessions(route.params.id)
+  const statuses = await Promise.all(sessionRows.map((session) => getSessionSaleStatus(session.id)))
+  sessions.value = sessionRows.map((session, index) => ({
+    ...session,
+    saleStatus: statuses[index]?.status,
+    clickable: statuses[index]?.clickable
+  }))
   viewers.value = await getViewers()
-  form.sessionId = Number(route.query.sessionId) || sessions.value[0]?.id || null
+  const requestedSession = sessions.value.find((session) => session.id === Number(route.query.sessionId) && !isSessionDisabled(session))
+  form.sessionId = requestedSession?.id || sessions.value.find((session) => !isSessionDisabled(session))?.id || null
   form.viewerIds = viewers.value.filter((item) => item.defaultViewer).map((item) => item.id)
   await loadLevels()
   await applyLatestReservation()

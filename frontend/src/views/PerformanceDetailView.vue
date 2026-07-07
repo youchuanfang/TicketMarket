@@ -35,11 +35,12 @@
         <button
           v-for="session in sessions"
           :key="session.id"
-          :class="['session-card', { active: selectedSession?.id === session.id }]"
+          :class="['session-card', { active: selectedSession?.id === session.id, disabled: isSessionDisabled(session) }]"
+          :disabled="isSessionDisabled(session)"
           @click="selectSession(session)"
         >
           <strong>{{ session.sessionName }}</strong>
-          <span>{{ session.startTime }} · {{ modeLabel(session.purchaseMode) }}</span>
+          <span>{{ session.startTime }} · {{ sessionStatusText(session) }}</span>
         </button>
       </div>
       <p v-if="!sessions.length" class="empty-inline">暂无可选场次，请在后台发布页保存后生成场次。</p>
@@ -126,7 +127,7 @@ const statusMap = {
   SOLD_OUT: '已售罄',
   ENDED: '已结束',
   RETURNED: '热卖中',
-  LOCKED: '已结束'
+  LOCKED: '已售罄'
 }
 const modeMap = {
   SELECTABLE: '支持自主选座',
@@ -140,6 +141,8 @@ const modeText = computed(() => modeMap[detail.value?.saleMode] || '')
 const detailBlocks = computed(() => detail.value?.detailBlocks || [])
 const detailHtml = computed(() => rewriteImageSources(detail.value?.detailContent || ''))
 const modeLabel = (mode) => modeMap[mode] || mode
+const isSessionDisabled = (session) => ['SOLD_OUT', 'ENDED', 'UNAVAILABLE'].includes(session.saleStatus)
+const sessionStatusText = (session) => statusMap[session.saleStatus] || modeLabel(session.purchaseMode)
 const refundRows = computed(() => {
   if (!detail.value?.refundFreeUntil || !detail.value?.refundFeeUntil || !detail.value?.refundStopTime) return []
   const saleStart = selectedSaleStatus.value.saleStartTime || selectedSession.value?.saleStartTime || detail.value.startTime
@@ -161,6 +164,7 @@ const saleStatusDescription = computed(() => {
 })
 
 const selectSession = async (session) => {
+  if (isSessionDisabled(session)) return
   selectedSession.value = session
   const [levels, saleStatus] = await Promise.all([
     getSessionTicketLevels(session.id),
@@ -168,11 +172,21 @@ const selectSession = async (session) => {
   ])
   ticketLevels.value = levels
   selectedSaleStatus.value = saleStatus
+  Object.assign(session, {
+    saleStatus: saleStatus.status,
+    buttonText: saleStatus.buttonText,
+    clickable: saleStatus.clickable,
+    hasStock: saleStatus.hasStock
+  })
 }
 
 const buyNow = () => {
   if (!selectedSession.value) {
     ElMessage.warning('请先选择场次')
+    return
+  }
+  if (buyDisabled.value) {
+    ElMessage.warning(selectedSaleStatus.value.buttonText || '当前场次暂不可购票')
     return
   }
   if (selectedSaleStatus.value.status === 'COMING_SOON') {
@@ -189,9 +203,29 @@ const rewriteImageSources = (html) => String(html || '').replace(/src="([^"]+)"/
 onMounted(async () => {
   try {
     detail.value = await getPerformance(route.params.id)
-    sessions.value = await getPerformanceSessions(route.params.id)
+    const sessionRows = await getPerformanceSessions(route.params.id)
+    const statuses = await Promise.all(sessionRows.map((session) => getSessionSaleStatus(session.id)))
+    sessions.value = sessionRows.map((session, index) => ({
+      ...session,
+      saleStatus: statuses[index]?.status,
+      buttonText: statuses[index]?.buttonText,
+      clickable: statuses[index]?.clickable,
+      hasStock: statuses[index]?.hasStock
+    }))
     if (sessions.value.length) {
-      await selectSession(sessions.value[0])
+      const initialSession = sessions.value.find((session) => !isSessionDisabled(session))
+      if (initialSession) {
+        await selectSession(initialSession)
+      } else {
+        selectedSession.value = sessions.value[0]
+        selectedSaleStatus.value = {
+          status: selectedSession.value.saleStatus,
+          buttonText: selectedSession.value.buttonText,
+          clickable: false,
+          hasStock: selectedSession.value.hasStock
+        }
+        ticketLevels.value = []
+      }
     } else {
       ticketLevels.value = detail.value.ticketLevels || []
     }

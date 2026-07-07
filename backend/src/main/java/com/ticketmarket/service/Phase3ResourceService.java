@@ -677,16 +677,20 @@ public class Phase3ResourceService {
 
     public Map<String, Object> frontSaleStatus(Long sessionId) {
         refreshBatchStatus();
-        Map<String, Object> batch = frontBatch(sessionId);
-        if (batch == null) return map("status", "ENDED", "buttonText", "已结束", "clickable", false, "hasStock", false);
+        Map<String, Object> session = session(sessionId);
         LocalDateTime now = LocalDateTime.now();
+        LocalDateTime sessionStart = parseTime(String.valueOf(session.get("startTime")));
+        if (!now.isBefore(sessionStart)) {
+            return frontStatus(sessionId, "ENDED", "已结束", false, false, null, session.get("startTime"));
+        }
+        Map<String, Object> batch = frontBatch(sessionId);
+        if (batch == null) return frontStatus(sessionId, "SOLD_OUT", "已售罄", false, false, null, session.get("startTime"));
         LocalDateTime saleStart = parseTime(String.valueOf(batch.get("saleStartTime")));
         LocalDateTime lockTime = parseTime(String.valueOf(batch.get("lockTime")));
         boolean hasStock = hasFrontStock(batch);
         if (now.isBefore(saleStart)) return frontStatus(batch, "COMING_SOON", "预约抢票", true, hasStock);
         if (!now.isBefore(lockTime) || "LOCKED".equals(batch.get("status"))) {
-            boolean hasNext = hasFutureBatch(sessionId, now);
-            return frontStatus(batch, hasNext ? "COMING_SOON" : "ENDED", hasNext ? "预约抢票" : "已结束", hasNext, false);
+            return frontStatus(batch, "SOLD_OUT", "已售罄", false, false);
         }
         if (!hasStock) return frontStatus(batch, "SOLD_OUT", "已售罄", false, false);
         return frontStatus(batch, "ON_SALE", "立即购票", true, true);
@@ -987,9 +991,10 @@ public class Phase3ResourceService {
                 "clickable", clickable, "hasStock", hasStock, "saleStartTime", batch.get("saleStartTime"), "saleEndTime", batch.get("lockTime"));
     }
 
-    private boolean hasFutureBatch(Long sessionId, LocalDateTime now) {
-        return rows(batchSelect() + " where sb.session_id=? and sb.deleted=0", sessionId).stream()
-                .anyMatch(item -> now.isBefore(parseTime(String.valueOf(item.get("saleStartTime")))));
+    private Map<String, Object> frontStatus(Long sessionId, String status, String buttonText, boolean clickable, boolean hasStock,
+                                            Object saleStartTime, Object saleEndTime) {
+        return map("batchId", null, "sessionId", sessionId, "status", status, "frontStatus", status, "buttonText", buttonText,
+                "clickable", clickable, "hasStock", hasStock, "saleStartTime", saleStartTime, "saleEndTime", saleEndTime);
     }
 
     private boolean hasFrontStock(Map<String, Object> batch) {

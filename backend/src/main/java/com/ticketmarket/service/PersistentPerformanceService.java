@@ -22,11 +22,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -133,8 +135,8 @@ public class PersistentPerformanceService {
                 persistImagePath(str(payload, "poster", str(payload, "posterPath", ""))),
                 persistImagePath(str(payload, "banner", str(payload, "bannerPath", str(payload, "poster", "")))),
                 persistImagePath(str(payload, "detailImage", str(payload, "detailImagePath", ""))),
-                decimalValue(payload, "priceMin", BigDecimal.ZERO),
-                decimalValue(payload, "priceMax", BigDecimal.ZERO),
+                derivedPrice(payload, true),
+                derivedPrice(payload, false),
                 str(payload, "summary", ""),
                 str(payload, "intro", str(payload, "introduction", "")),
                 str(payload, "detailContent", ""),
@@ -152,7 +154,7 @@ public class PersistentPerformanceService {
                 str(payload, "saleStatus", str(payload, "status", "COMING_SOON")),
                 boolValue(payload, "homeRecommended", false),
                 intValue(payload, "homeSort", 0),
-                timeValue(payload, "startTime", null),
+                derivedStartTime(payload),
                 id
         );
         if (payload.containsKey("detailBlocks")) {
@@ -270,8 +272,8 @@ public class PersistentPerformanceService {
                 persistImagePath(str(payload, "poster", str(payload, "posterPath", ""))),
                 persistImagePath(str(payload, "banner", str(payload, "bannerPath", str(payload, "poster", "")))),
                 persistImagePath(str(payload, "detailImage", str(payload, "detailImagePath", ""))),
-                decimalValue(payload, "priceMin", BigDecimal.ZERO),
-                decimalValue(payload, "priceMax", BigDecimal.ZERO),
+                derivedPrice(payload, true),
+                derivedPrice(payload, false),
                 str(payload, "summary", ""),
                 str(payload, "intro", str(payload, "introduction", "")),
                 str(payload, "detailContent", ""),
@@ -289,7 +291,7 @@ public class PersistentPerformanceService {
                 str(payload, "saleStatus", str(payload, "status", "COMING_SOON")),
                 boolValue(payload, "homeRecommended", false),
                 intValue(payload, "homeSort", 0),
-                timeValue(payload, "startTime", null)
+                derivedStartTime(payload)
         );
         return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
     }
@@ -309,8 +311,19 @@ public class PersistentPerformanceService {
     }
 
     private void syncPublishingResources(Long performanceId, Map<String, Object> payload) {
+        if (!hasPublishingPayload(payload)) return;
         List<String> dates = publishingDates(payload);
         List<Map<String, Object>> levels = publishingTicketLevels(payload);
+        Set<LocalDateTime> desiredTimes = dates.stream()
+                .map(value -> LocalDateTime.parse(value, FORMATTER))
+                .collect(Collectors.toSet());
+        for (Map<String, Object> session : jdbcTemplate.queryForList(
+                "select id, start_time from performance_session where performance_id=? and deleted=0", performanceId)) {
+            LocalDateTime start = localDateTime(session.get("start_time"));
+            if (!desiredTimes.contains(start)) {
+                jdbcTemplate.update("update performance_session set deleted=1, updated_at=now() where id=?", session.get("id"));
+            }
+        }
         if (dates.isEmpty() || levels.isEmpty()) return;
 
         Long venueId = ensurePublishingVenue(payload);
@@ -327,9 +340,15 @@ public class PersistentPerformanceService {
 
         for (String startTime : dates) {
             Long sessionId = ensurePublishingSession(performanceId, venueId, payload, startTime);
+            Set<Long> usedLevelIds = new HashSet<>();
             for (Map<String, Object> level : levels) {
                 Long areaId = areaIds.get(publishingAreaName(level, venueId));
-                ensurePublishingTicketLevel(sessionId, areaId, level);
+                usedLevelIds.add(ensurePublishingTicketLevel(sessionId, areaId, level));
+            }
+            for (Long id : jdbcTemplate.queryForList("select id from ticket_level where session_id=? and deleted=0", Long.class, sessionId)) {
+                if (!usedLevelIds.contains(id)) {
+                    jdbcTemplate.update("update ticket_level set deleted=1, updated_at=now() where id=?", id);
+                }
             }
             ensurePublishingBatch(sessionId, payload, startTime, levels);
             ensureSessionSeats(sessionId, venueId);
@@ -338,7 +357,6 @@ public class PersistentPerformanceService {
 
     private List<String> publishingDates(Map<String, Object> payload) {
         List<String> values = new ArrayList<>();
-        addDate(values, str(payload, "startTime", ""));
         Object sessionDates = payload.get("sessionDates");
         if (sessionDates instanceof List<?> list) {
             for (Object value : list) addDate(values, String.valueOf(value));
@@ -347,6 +365,12 @@ public class PersistentPerformanceService {
             addDate(values, line);
         }
         return values.stream().distinct().toList();
+    }
+
+    private boolean hasPublishingPayload(Map<String, Object> payload) {
+        return payload.containsKey("sessionDates")
+                || payload.containsKey("sessionDatesText")
+                || payload.containsKey("quickTicketLevels");
     }
 
     @SuppressWarnings("unchecked")
@@ -358,6 +382,28 @@ public class PersistentPerformanceService {
                 .map(item -> (Map<String, Object>) item)
                 .filter(item -> intValue(item, "price", 0) > 0 && intValue(item, "stock", intValue(item, "totalStock", 0)) >= 0)
                 .toList();
+    }
+
+    private Timestamp derivedStartTime(Map<String, Object> payload) {
+        List<String> dates = publishingDates(payload);
+        if (dates.isEmpty()) return timeValue(payload, "startTime", null);
+        return Timestamp.valueOf(LocalDateTime.parse(dates.stream().sorted().findFirst().orElse(dates.get(0)), FORMATTER));
+    }
+
+    private LocalDateTime localDateTime(Object value) {
+        if (value instanceof LocalDateTime time) return time;
+        if (value instanceof Timestamp timestamp) return timestamp.toLocalDateTime();
+        return LocalDateTime.parse(String.valueOf(value).replace('T', ' ').substring(0, 19), FORMATTER);
+    }
+
+    private BigDecimal derivedPrice(Map<String, Object> payload, boolean min) {
+        List<BigDecimal> prices = publishingTicketLevels(payload).stream()
+                .map(item -> decimalValue(item, "price", BigDecimal.ZERO))
+                .filter(price -> price.compareTo(BigDecimal.ZERO) > 0)
+                .sorted()
+                .toList();
+        if (prices.isEmpty()) return decimalValue(payload, min ? "priceMin" : "priceMax", BigDecimal.ZERO);
+        return min ? prices.get(0) : prices.get(prices.size() - 1);
     }
 
     private void addDate(List<String> values, String value) {
@@ -486,7 +532,7 @@ public class PersistentPerformanceService {
         return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
     }
 
-    private void ensurePublishingTicketLevel(Long sessionId, Long areaId, Map<String, Object> level) {
+    private Long ensurePublishingTicketLevel(Long sessionId, Long areaId, Map<String, Object> level) {
         BigDecimal price = decimalValue(level, "price", BigDecimal.ZERO);
         String name = ticketLevelName(areaId, price.intValue());
         int total = intValue(level, "stock", intValue(level, "totalStock", 0));
@@ -502,7 +548,7 @@ public class PersistentPerformanceService {
                     set name=?, area_id=?, price=?, total_stock=?, released_stock=?, unreleased_stock=?, status='ENABLED', updated_at=now()
                     where id=? and deleted=0
                     """, name, areaId, price, total, released, Math.max(0, total - released), existing.get(0));
-            return;
+            return existing.get(0);
         }
         jdbcTemplate.update("""
                 insert into ticket_level
@@ -510,6 +556,7 @@ public class PersistentPerformanceService {
                  locked_stock, refunded_stock, status, created_at, updated_at, deleted)
                 values (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'ENABLED', now(), now(), 0)
                 """, sessionId, name, areaId, price, total, released, Math.max(0, total - released));
+        return jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
     }
 
     private void ensurePublishingBatch(Long sessionId, Map<String, Object> payload, String startTime, List<Map<String, Object>> levels) {
