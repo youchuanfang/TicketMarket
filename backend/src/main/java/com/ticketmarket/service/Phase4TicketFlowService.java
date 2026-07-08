@@ -809,7 +809,13 @@ public class Phase4TicketFlowService {
                     from order_item where order_id = ?
                     """, id);
             Long ticketLevelId = items.isEmpty() ? null : longValue(items.get(0), "ticketLevelId", null);
-            Map<String, Object> level = ticketLevelId == null ? Map.of("name", "") : resourceService.ticketLevel(ticketLevelId);
+            Map<String, Object> level;
+            try {
+                level = ticketLevelId == null ? Map.of("name", "") : resourceService.ticketLevel(ticketLevelId);
+            } catch (ApiException ex) {
+                jdbcTemplate.update("update ticket_order set deleted=1, status='CANCELLED', updated_at=now() where id=?", id);
+                return;
+            }
             orders.put(id, map(
                     "id", id,
                     "orderNo", rs.getString("orderNo"),

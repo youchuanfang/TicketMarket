@@ -381,7 +381,7 @@
           </div>
           <div class="head-actions stock-filter-actions">
             <el-select v-model="stockSessionId" clearable filterable placeholder="选择场次" @change="handleStockSessionChange">
-              <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
+              <el-option v-for="session in stockSessionOptions" :key="session.id" :label="stockOptionSessionLabel(session)" :value="session.id" />
             </el-select>
             <el-select v-model="stockTicketLevelId" clearable filterable placeholder="选择票档/票价" @change="loadInventory">
               <el-option v-for="level in stockTicketLevelOptions" :key="level.ticketLevelId" :label="stockTicketLabel(level)" :value="level.ticketLevelId" />
@@ -959,6 +959,7 @@ const ticketLevelAreas = ref([])
 const saleBatches = ref([])
 const stockPool = ref([])
 const inventoryRows = ref([])
+const stockInventoryOptions = ref([])
 const refunds = ref([])
 const checkins = ref([])
 const riskLogs = ref([])
@@ -1075,6 +1076,20 @@ const filteredStockPool = computed(() => stockPool.value.filter((row) => (
   (!stockSessionId.value || String(row.sessionId) === String(stockSessionId.value)) &&
   (!stockTicketLevelId.value || String(row.ticketLevelId) === String(stockTicketLevelId.value))
 )))
+const stockSessionOptions = computed(() => {
+  const seen = new Set()
+  return stockInventoryOptions.value.filter((row) => {
+    const key = String(row.sessionId)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).map((row) => ({
+    id: row.sessionId,
+    itemTitle: row.itemTitle,
+    sessionName: row.sessionName,
+    startTime: row.startTime
+  }))
+})
 const stockTicketLevelOptions = computed(() => {
   const seen = new Set()
   return inventoryRows.value.filter((row) => {
@@ -1136,6 +1151,7 @@ const stockSessionLabel = (id) => {
 }
 const stockLevelLabel = (id) => inventoryRows.value.find((item) => String(item.ticketLevelId) === String(id))?.ticketLevelName || `票档 ${id || ''}`
 const stockTicketLabel = (row) => `${row.ticketLevelName || `票档 ${row.ticketLevelId}`} ￥${row.price}`
+const stockOptionSessionLabel = (session) => `${session.itemTitle || '未命名项目'} / ${session.sessionName || session.startTime || '未命名场次'}`
 
 async function loadAll() {
   if (user.canUseAdminApi) {
@@ -1161,9 +1177,8 @@ async function loadAll() {
     saleBatches.value = batchRows
     stockPool.value = poolRows
     if (!selectedSessionId.value && sessions.value.length) selectedSessionId.value = sessions.value[0].id
-    if (!stockSessionId.value && sessions.value.length) stockSessionId.value = sessions.value[0].id
     if (!seatForm.venueId && seatVenueOptions.value.length) seatForm.venueId = seatVenueOptions.value[0].id
-    await Promise.all([loadTicketLevels(), loadInventory(), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
+    await Promise.all([loadTicketLevels(), loadInventory({ ensureDefault: true }), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
   }
   if (user.canUseChecker) Object.assign(checkerMetrics, await http.get('/api/checker/dashboard'))
   await loadOperations()
@@ -1214,8 +1229,14 @@ async function loadTicketLevels() {
   ticketLevelAreas.value = session?.venueId ? await adminApi.areas(session.venueId) : []
 }
 
-async function loadInventory() {
+async function loadInventory(options = {}) {
   if (!user.canUseAdminApi) return
+  stockInventoryOptions.value = await adminApi.inventory()
+  const hasSelectedInventory = stockSessionId.value && stockSessionOptions.value.some((row) => String(row.id) === String(stockSessionId.value))
+  if (!hasSelectedInventory) {
+    stockSessionId.value = options.ensureDefault ? stockSessionOptions.value[0]?.id || null : null
+    stockTicketLevelId.value = null
+  }
   const params = {}
   if (stockSessionId.value) params.sessionId = stockSessionId.value
   if (stockTicketLevelId.value) params.ticketLevelId = stockTicketLevelId.value
