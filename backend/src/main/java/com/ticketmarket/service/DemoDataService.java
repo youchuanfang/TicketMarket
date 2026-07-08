@@ -44,15 +44,32 @@ public class DemoDataService {
     }
 
     public UserAccount createUser(String username, String password, String nickname) {
+        return createAccount(username, password, nickname, "USER", false);
+    }
+
+    public UserAccount createStaffUser(String username, String password, String nickname, String roleCode) {
+        String role = normalizeRole(roleCode);
+        if (!List.of("ADMIN", "MANAGER", "CHECKER").contains(role)) {
+            throw new ApiException(400, "只能创建管理员或检票员账号");
+        }
+        return createAccount(username, password, nickname, role, true);
+    }
+
+    private UserAccount createAccount(String username, String password, String nickname, String roleCode, boolean verified) {
         String normalized = normalize(username);
         if (usersByName.containsKey(normalized)) {
             throw new ApiException(409, "用户名已存在");
         }
-        UserAccount account = new UserAccount(userId.incrementAndGet(), normalized, PasswordUtil.hash(password), nickname, "USER", false);
+        UserAccount account = new UserAccount(userId.incrementAndGet(), normalized, PasswordUtil.hash(password), nickname, roleCode, verified);
         usersById.put(account.getId(), account);
         usersByName.put(account.getUsername(), account);
         viewersByUser.put(account.getId(), new ArrayList<>());
         return account;
+    }
+
+    private String normalizeRole(String roleCode) {
+        if (roleCode == null || roleCode.isBlank()) return "CHECKER";
+        return roleCode.trim().toUpperCase(Locale.ROOT);
     }
 
     public Optional<UserAccount> findUserByName(String username) {

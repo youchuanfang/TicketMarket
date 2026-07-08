@@ -37,6 +37,10 @@ public class AuthController {
         if (!PasswordUtil.matches(request.password(), account.getPasswordHash())) {
             throw new ApiException(401, "用户名或密码错误");
         }
+        if (request.roleCode() != null && !request.roleCode().isBlank()
+                && !request.roleCode().trim().equalsIgnoreCase(account.getRoleCode())) {
+            throw new ApiException(403, "请选择正确的登录入口");
+        }
         if (isPrivilegedRole(account.getRoleCode()) && !isLocalRequest(servletRequest)) {
             throw new ApiException(403, "后台账号仅允许在服务器本机登录");
         }

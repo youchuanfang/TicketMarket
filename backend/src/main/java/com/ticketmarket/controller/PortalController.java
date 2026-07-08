@@ -118,6 +118,11 @@ public class PortalController {
         return Result.ok(movieService.movie(id));
     }
 
+    @GetMapping("/movies")
+    public Result<List<MovieCard>> movies() {
+        return Result.ok(movieService.movies());
+    }
+
     @GetMapping("/movies/{id}/schedule")
     public Result<Map<String, Object>> movieSchedule(@PathVariable Long id, @RequestParam(required = false) String city) {
         return Result.ok(movieService.movieSchedule(id, city));

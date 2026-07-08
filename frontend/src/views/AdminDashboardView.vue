@@ -182,6 +182,7 @@
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openCinema(row)">编辑</el-button>
+              <el-button link type="primary" @click="openCinemaSchedules(row)">排片</el-button>
               <RouterLink class="table-link" :to="`/admin/venue/${row.id}/seats`">座位图</RouterLink>
               <el-button link type="danger" @click="deleteCinema(row)">删除</el-button>
             </template>
@@ -285,8 +286,8 @@
           <el-button type="primary" @click="openSession()">新增场次</el-button>
         </div>
         <el-table :data="sessions" border empty-text="暂无场次">
-          <el-table-column label="演出" min-width="180">
-            <template #default="{ row }">{{ performanceTitle(row.performanceId) }}</template>
+          <el-table-column label="项目" min-width="180">
+            <template #default="{ row }">{{ sessionItemTitle(row) }}</template>
           </el-table-column>
           <el-table-column prop="sessionName" label="场次" min-width="180" />
           <el-table-column label="场馆" min-width="150">
@@ -376,24 +377,67 @@
       <section v-else-if="activeSection === 'stock-pool'" class="admin-card">
         <div class="table-head">
           <div>
-            <h2>库存池</h2>
-            <p class="section-note">只承接锁票后回收、退票待释放等异常回流库存，不作为日常发布入口。</p>
+            <h2>库存查询</h2>
+            <p class="section-note">查看每个场次、每个票档当前库存。回流记录只表示退票或锁票后的待释放库存，不作为日常发布入口。</p>
           </div>
-          <el-tag type="info">高级维护</el-tag>
+          <div class="head-actions stock-filter-actions">
+            <el-select v-model="stockPerformanceId" clearable filterable placeholder="选择演出" @change="handleStockPerformanceChange">
+              <el-option v-for="performance in stockPerformanceOptions" :key="performance.id" :label="performance.title" :value="performance.id" />
+            </el-select>
+            <el-select v-model="stockSessionId" clearable filterable placeholder="选择场次" @change="handleStockSessionChange">
+              <el-option v-for="session in stockSessionOptions" :key="session.id" :label="stockOptionSessionLabel(session)" :value="session.id" />
+            </el-select>
+            <el-select v-model="stockTicketLevelId" clearable filterable placeholder="选择票档/票价" @change="loadInventory">
+              <el-option v-for="level in stockTicketLevelOptions" :key="level.ticketLevelId" :label="stockTicketLabel(level)" :value="level.ticketLevelId" />
+            </el-select>
+            <el-button type="primary" plain @click="loadInventory">刷新库存</el-button>
+          </div>
         </div>
-        <el-table :data="stockPool" border empty-text="暂无库存">
-          <el-table-column prop="sessionId" label="场次" width="100" />
-          <el-table-column prop="ticketLevelId" label="票档" width="100" />
-          <el-table-column label="来源">
-            <template #default="{ row }">{{ sourceTypeText(row.sourceType) }}</template>
+        <el-table :data="inventoryRows" border empty-text="请选择场次或暂无库存">
+          <el-table-column label="场次" min-width="240">
+            <template #default="{ row }">
+              <div>{{ row.itemTitle }}</div>
+              <small class="muted-text">{{ row.startTime }} {{ row.venueName ? `/ ${row.venueName}` : '' }}</small>
+            </template>
           </el-table-column>
-          <el-table-column label="库存状态">
-            <template #default="{ row }">{{ statusText(row.stockStatus) }}</template>
+          <el-table-column prop="ticketLevelName" label="票档" min-width="140" />
+          <el-table-column prop="price" label="票价" width="90">
+            <template #default="{ row }">￥{{ row.price }}</template>
           </el-table-column>
-          <el-table-column label="可用于下轮" width="140">
-            <template #default="{ row }">{{ row.availableForNextBatch ? '可用' : '不可用' }}</template>
-          </el-table-column>
+          <el-table-column prop="totalStock" label="总库存" width="90" />
+          <el-table-column prop="releasedStock" label="已开放" width="90" />
+          <el-table-column prop="availableStock" label="当前可售" width="100" />
+          <el-table-column prop="lockedStock" label="锁定中" width="90" />
+          <el-table-column prop="soldStock" label="已售" width="90" />
+          <el-table-column prop="unreleasedStock" label="未开放" width="90" />
+          <el-table-column prop="refundedStock" label="已退回" width="90" />
+          <el-table-column prop="waitingPoolStock" label="待释放回流" width="120" />
         </el-table>
+        <div class="stock-pool-subtable">
+          <div class="table-head compact-head">
+            <div>
+              <h3>回流记录</h3>
+              <p class="section-note">这里仅展示退票、锁票回收等待再次释放的库存记录。</p>
+            </div>
+          </div>
+          <el-table :data="filteredStockPool" border empty-text="暂无回流记录">
+            <el-table-column label="场次" min-width="180">
+              <template #default="{ row }">{{ stockSessionLabel(row.sessionId) }}</template>
+            </el-table-column>
+            <el-table-column label="票档" min-width="120">
+              <template #default="{ row }">{{ stockLevelLabel(row.ticketLevelId) }}</template>
+            </el-table-column>
+            <el-table-column label="来源" width="140">
+              <template #default="{ row }">{{ sourceTypeText(row.sourceType) }}</template>
+            </el-table-column>
+            <el-table-column label="库存状态" width="120">
+              <template #default="{ row }">{{ statusText(row.stockStatus) }}</template>
+            </el-table-column>
+            <el-table-column label="可用于下轮" width="120">
+              <template #default="{ row }">{{ row.availableForNextBatch ? '可用' : '不可用' }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
       </section>
 
       <section v-else-if="activeSection === 'refunds'" class="admin-card">
@@ -402,7 +446,18 @@
           <el-button type="primary" plain @click="loadOperations">刷新</el-button>
         </div>
         <el-table :data="refunds" border empty-text="暂无退票">
-          <el-table-column prop="orderId" label="订单" width="100" />
+          <el-table-column label="订单" min-width="320">
+            <template #default="{ row }">
+              <div class="admin-order-cell">
+                <img v-if="assetUrl(row.order?.poster)" :src="assetUrl(row.order.poster)" :alt="row.order?.itemTitle" />
+                <div>
+                  <strong>{{ row.order?.itemTitle || `订单 ${row.orderId}` }}</strong>
+                  <small>{{ row.order?.orderNo || row.orderId }}</small>
+                  <small>{{ row.order?.sessionTime }} {{ row.order?.ticketLevelName }} × {{ row.order?.quantity }}</small>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="金额" width="120">
             <template #default="{ row }">￥{{ row.amount }}</template>
           </el-table-column>
@@ -417,6 +472,27 @@
             </template>
           </el-table-column>
         </el-table>
+      </section>
+
+      <section v-else-if="activeSection === 'staff-register'" class="admin-card">
+        <div class="table-head">
+          <div>
+            <h2>非用户注册</h2>
+            <p class="section-note">仅管理员在这里创建后台管理员或检票员账号，普通用户仍从登录页注册。</p>
+          </div>
+        </div>
+        <el-form label-position="top" class="admin-editor-grid staff-register-form">
+          <el-form-item label="账号"><el-input v-model="staffForm.username" /></el-form-item>
+          <el-form-item label="昵称"><el-input v-model="staffForm.nickname" /></el-form-item>
+          <el-form-item label="密码"><el-input v-model="staffForm.password" type="password" show-password /></el-form-item>
+          <el-form-item label="身份">
+            <el-select v-model="staffForm.roleCode">
+              <el-option label="管理员" value="ADMIN" />
+              <el-option label="检票员" value="CHECKER" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <el-button type="primary" @click="createStaffUser">创建账号</el-button>
       </section>
 
       <section v-else-if="activeSection === 'reports'" class="admin-card">
@@ -645,12 +721,23 @@
         <el-form-item label="导演"><el-input v-model="movieForm.director" /></el-form-item>
         <el-form-item label="主演"><el-input v-model="movieForm.actors" /></el-form-item>
         <el-form-item label="评分"><el-input v-model="movieForm.rating" /></el-form-item>
-        <el-form-item label="海报" class="span-2"><el-input v-model="movieForm.poster" placeholder="图片地址" /></el-form-item>
+        <el-form-item label="海报" class="span-2">
+          <div class="upload-row">
+            <img v-if="assetUrl(movieForm.poster)" :src="assetUrl(movieForm.poster)" alt="海报预览" class="poster-preview" />
+            <input type="file" accept="image/*" :disabled="uploadingMoviePoster" @change="setMoviePoster" />
+            <el-input v-model="movieForm.poster" placeholder="也可以直接填写图片地址或 D:\desktop\movie.png" @change="importMoviePosterIfLocal" />
+            <el-button @click="importMoviePoster">导入本机路径</el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="简介" class="span-2"><el-input v-model="movieForm.summary" type="textarea" :rows="3" /></el-form-item>
         <el-form-item label="排片" class="span-2">
           <div class="quick-ticket-editor">
             <div v-for="(session, index) in movieForm.sessions" :key="index" class="quick-ticket-row">
-              <label class="quick-field"><span>城市</span><el-input v-model="session.city" @change="syncMovieSessionCinema(index)" /></label>
+              <label class="quick-field"><span>城市</span>
+                <el-select v-model="session.city" filterable placeholder="选择城市" @change="syncMovieSessionCinema(index)">
+                  <el-option v-for="cityName in cinemaCityOptions" :key="cityName" :label="cityName" :value="cityName" />
+                </el-select>
+              </label>
               <label class="quick-field"><span>电影院</span>
                 <el-select v-model="session.cinemaId" filterable placeholder="选择电影院" @change="syncMovieSessionCinema(index)">
                   <el-option v-for="cinema in cinemaOptionsByCity(session.city)" :key="cinema.id" :label="cinema.name" :value="cinema.id" />
@@ -687,6 +774,44 @@
         <el-button @click="cinemaDialog = false">取消</el-button>
         <el-button type="primary" @click="saveCinema">保存电影院</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="cinemaScheduleDialog" :title="`${activeCinema?.name || '电影院'}排片`" width="980px">
+      <el-table :data="cinemaSchedules" border empty-text="暂无排片">
+        <el-table-column label="电影" min-width="220">
+          <template #default="{ row }">
+            <div class="admin-order-cell">
+              <img v-if="assetUrl(row.poster)" :src="assetUrl(row.poster)" :alt="row.movieTitle" />
+              <div>
+                <strong>{{ row.movieTitle }}</strong>
+                <small>{{ row.startTime }} · {{ row.hallName }}</small>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="price" label="票价" width="100" />
+        <el-table-column prop="stock" label="座位" width="90" />
+        <el-table-column prop="soldStock" label="已售" width="90" />
+        <el-table-column label="座位图" width="100">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="viewCinemaScheduleSeats(row)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="cinema-schedule-form">
+        <el-select v-model="cinemaScheduleForm.movieId" filterable placeholder="选择电影">
+          <el-option v-for="movie in movies" :key="movie.id" :label="movie.title" :value="movie.id" />
+        </el-select>
+        <el-select v-model="cinemaScheduleForm.hallName" filterable placeholder="选择影厅">
+          <el-option v-for="hall in activeCinema?.halls || []" :key="hall.id" :label="hall.name" :value="hall.name" />
+        </el-select>
+        <el-date-picker v-model="cinemaScheduleForm.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm:ss" placeholder="放映时间" />
+        <el-input-number v-model="cinemaScheduleForm.price" :min="1" />
+        <el-button type="primary" @click="saveCinemaSchedule">新增排片</el-button>
+      </div>
+      <div v-if="cinemaScheduleSeats.length" class="cinema-seat-preview">
+        <SeatSvg :seats="cinemaScheduleSeats" :venue="activeCinema || {}" />
+      </div>
     </el-dialog>
 
     <el-dialog v-model="seatEditDialog" title="编辑座位" width="520px">
@@ -911,12 +1036,19 @@ const ticketLevels = ref([])
 const ticketLevelAreas = ref([])
 const saleBatches = ref([])
 const stockPool = ref([])
+const inventoryRows = ref([])
+const stockInventoryOptions = ref([])
+const cinemaSchedules = ref([])
+const cinemaScheduleSeats = ref([])
 const refunds = ref([])
 const checkins = ref([])
 const riskLogs = ref([])
 const statistics = reactive({ orderCount: 0, salesAmount: 0, ticketCount: 0, refundCount: 0, checkinCount: 0, rushSuccessRate: '0%' })
 const ticketCode = ref('')
 const selectedSessionId = ref(null)
+const stockPerformanceId = ref(null)
+const stockSessionId = ref(null)
+const stockTicketLevelId = ref(null)
 const seatFormAreas = ref([])
 const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowStart: 1, rowEnd: 3, seatsPerRow: 12, startX: 60, startY: 80, gapX: 30, gapY: 30, aisleAfterSeats: '6' })
 const detailEditorRef = ref(null)
@@ -928,10 +1060,12 @@ const richFontSize = ref(16)
 const savedRichRange = ref(null)
 const uploadingPoster = ref(false)
 const uploadingRichImages = ref(false)
+const uploadingMoviePoster = ref(false)
 
 const performanceDialog = ref(false)
 const movieDialog = ref(false)
 const cinemaDialog = ref(false)
+const cinemaScheduleDialog = ref(false)
 const seatEditDialog = ref(false)
 const venueDialog = ref(false)
 const areaDialog = ref(false)
@@ -941,6 +1075,8 @@ const batchDialog = ref(false)
 const performanceForm = reactive(emptyPerformance())
 const movieForm = reactive(emptyMovie())
 const cinemaForm = reactive(emptyCinema())
+const cinemaScheduleForm = reactive(emptyCinemaSchedule())
+const staffForm = reactive(emptyStaffUser())
 const seatEditForm = reactive(emptySeatEdit())
 const venueForm = reactive(emptyVenue())
 const areaForm = reactive(emptyArea())
@@ -949,6 +1085,7 @@ const ticketLevelForm = reactive(emptyTicketLevel())
 const batchForm = reactive(emptyBatch())
 const autoSaleRefundDefaults = reactive({ sale: '', free: '', fee: '', stop: '' })
 const activeHomeSectionCode = ref('hot')
+const activeCinema = ref(null)
 
 const roleMap = { ADMIN: '系统管理员', MANAGER: '票务管理员', CHECKER: '检票员' }
 const menus = [
@@ -962,8 +1099,9 @@ const menus = [
   { key: 'session', title: '场次管理', icon: 'Calendar', path: '/admin/session', roles: ['ADMIN', 'MANAGER'] },
   { key: 'ticket-level', title: '票档票价', icon: 'Tickets', path: '/admin/ticket-level', roles: ['ADMIN', 'MANAGER'] },
   { key: 'sale-batch', title: '开售批次', icon: 'Clock', path: '/admin/sale-batch', roles: ['ADMIN', 'MANAGER'] },
-  { key: 'stock-pool', title: '库存池', icon: 'Box', path: '/admin/stock-pool', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'stock-pool', title: '库存查询', icon: 'Box', path: '/admin/stock-pool', roles: ['ADMIN', 'MANAGER'] },
   { key: 'refunds', title: '退票审核', icon: 'RefreshLeft', path: '/admin/refunds', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'staff-register', title: '非用户注册', icon: 'UserFilled', path: '/admin/staff-register', roles: ['ADMIN'] },
   { key: 'checkin', title: '检票管理', icon: 'Checked', path: '/admin/checkin', roles: ['ADMIN', 'MANAGER', 'CHECKER'] },
   { key: 'reports', title: '统计报表', icon: 'TrendCharts', path: '/admin/reports', roles: ['ADMIN', 'MANAGER'] },
   { key: 'risk-logs', title: '风控日志', icon: 'Warning', path: '/admin/risk-logs', roles: ['ADMIN'] }
@@ -1020,6 +1158,47 @@ const selectedPerformanceVenue = computed(() => venues.value.find((item) => Stri
 const activeHomeSection = computed(() => homepageRecommendations.value.find((item) => item.code === activeHomeSectionCode.value) || homepageRecommendations.value[0])
 const activeHomeCandidates = computed(() => activeHomeSection.value?.candidates || [])
 const selectedHomeItems = computed(() => activeHomeSection.value?.selected || [])
+const filteredStockPool = computed(() => stockPool.value.filter((row) => (
+  (!stockPerformanceId.value || String(row.performanceId) === String(stockPerformanceId.value)) &&
+  (!stockSessionId.value || String(row.sessionId) === String(stockSessionId.value)) &&
+  (!stockTicketLevelId.value || String(row.ticketLevelId) === String(stockTicketLevelId.value))
+)))
+const stockPerformanceOptions = computed(() => {
+  const seen = new Set()
+  return stockInventoryOptions.value.filter((row) => {
+    const key = String(row.performanceId)
+    if (!row.performanceId || seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).map((row) => ({ id: row.performanceId, title: row.itemTitle }))
+})
+const stockSessionOptions = computed(() => {
+  const seen = new Set()
+  return stockInventoryOptions.value.filter((row) => {
+    if (stockPerformanceId.value && String(row.performanceId) !== String(stockPerformanceId.value)) return false
+    const key = String(row.sessionId)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).map((row) => ({
+    id: row.sessionId,
+    itemTitle: row.itemTitle,
+    sessionName: row.sessionName,
+    startTime: row.startTime
+  }))
+})
+const stockTicketLevelOptions = computed(() => {
+  const seen = new Set()
+  return stockInventoryOptions.value.filter((row) => {
+    if (stockPerformanceId.value && String(row.performanceId) !== String(stockPerformanceId.value)) return false
+    if (stockSessionId.value && String(row.sessionId) !== String(stockSessionId.value)) return false
+    const key = String(row.ticketLevelId)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
+const cinemaCityOptions = computed(() => [...new Set(cinemas.value.map((item) => item.cityName).filter(Boolean))])
 const ticketLevelAutoName = computed(() => `${areaName(ticketLevelForm.areaId).replace(/^区域\s*/, '票档')}${Number(ticketLevelForm.price || 0)}`)
 const performanceDateRows = computed(() => (performanceForm.sessionDates || []).map(normalizeDateTime).filter(Boolean).sort())
 const performanceTimePreview = computed(() => {
@@ -1054,9 +1233,25 @@ const quickAreaOptions = computed(() => {
 const clone = (value) => JSON.parse(JSON.stringify(value || {}))
 const sessionById = (id) => sessions.value.find((item) => String(item.id) === String(id))
 const performanceTitle = (id) => performances.value.find((item) => String(item.id) === String(id))?.title || `演出 ${id || ''}`
+const movieTitle = (id) => movies.value.find((item) => String(item.id) === String(id))?.title || `电影 ${id || ''}`
+const sessionItemTitle = (session) => {
+  if (!session) return '未选择项目'
+  if (session.performanceTitle) return session.performanceTitle
+  if (session.movieTitle) return session.movieTitle
+  if (session.performanceId) return performanceTitle(session.performanceId)
+  if (session.movieId) return movieTitle(session.movieId)
+  return '未选择项目'
+}
 const venueName = (id) => venues.value.find((item) => String(item.id) === String(id))?.name || `场馆 ${id || ''}`
 const areaName = (id) => [...areas.value, ...seatFormAreas.value, ...ticketLevelAreas.value].find((item) => String(item.id) === String(id))?.areaName || `区域 ${id || ''}`
-const sessionLabel = (session) => session ? `${performanceTitle(session.performanceId)} / ${session.sessionName}` : '未选择场次'
+const sessionLabel = (session) => session ? `${sessionItemTitle(session)} / ${session.sessionName}` : '未选择场次'
+const stockSessionLabel = (id) => {
+  const session = sessionById(id)
+  return session ? sessionLabel(session) : `场次 ${id || ''}`
+}
+const stockLevelLabel = (id) => inventoryRows.value.find((item) => String(item.ticketLevelId) === String(id))?.ticketLevelName || `票档 ${id || ''}`
+const stockTicketLabel = (row) => `${row.ticketLevelName || `票档 ${row.ticketLevelId}`} ￥${row.price}`
+const stockOptionSessionLabel = (session) => `${session.itemTitle || '未命名项目'} / ${session.sessionName || session.startTime || '未命名场次'}`
 
 async function loadAll() {
   if (user.canUseAdminApi) {
@@ -1083,7 +1278,7 @@ async function loadAll() {
     stockPool.value = poolRows
     if (!selectedSessionId.value && sessions.value.length) selectedSessionId.value = sessions.value[0].id
     if (!seatForm.venueId && seatVenueOptions.value.length) seatForm.venueId = seatVenueOptions.value[0].id
-    await Promise.all([loadTicketLevels(), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
+    await Promise.all([loadTicketLevels(), loadInventory({ ensureDefault: true }), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
   }
   if (user.canUseChecker) Object.assign(checkerMetrics, await http.get('/api/checker/dashboard'))
   await loadOperations()
@@ -1132,6 +1327,42 @@ async function loadTicketLevels() {
   ticketLevels.value = await adminApi.ticketLevels(selectedSessionId.value)
   const session = sessionById(selectedSessionId.value)
   ticketLevelAreas.value = session?.venueId ? await adminApi.areas(session.venueId) : []
+}
+
+async function loadInventory(options = {}) {
+  if (!user.canUseAdminApi) return
+  stockInventoryOptions.value = await adminApi.inventory()
+  const hasSelectedPerformance = !stockPerformanceId.value || stockPerformanceOptions.value.some((row) => String(row.id) === String(stockPerformanceId.value))
+  if (!hasSelectedPerformance) {
+    stockPerformanceId.value = null
+    stockSessionId.value = null
+    stockTicketLevelId.value = null
+  }
+  const hasSelectedInventory = stockSessionId.value && stockSessionOptions.value.some((row) => String(row.id) === String(stockSessionId.value))
+  if (!hasSelectedInventory) {
+    stockSessionId.value = null
+    stockTicketLevelId.value = null
+  }
+  const params = {}
+  if (stockPerformanceId.value) params.performanceId = stockPerformanceId.value
+  if (stockSessionId.value) params.sessionId = stockSessionId.value
+  if (stockTicketLevelId.value) params.ticketLevelId = stockTicketLevelId.value
+  inventoryRows.value = await adminApi.inventory(params)
+  stockPool.value = stockSessionId.value ? await adminApi.sessionStockPool(stockSessionId.value) : await adminApi.stockPool()
+  if (stockTicketLevelId.value && !inventoryRows.value.some((row) => String(row.ticketLevelId) === String(stockTicketLevelId.value))) {
+    stockTicketLevelId.value = null
+  }
+}
+
+async function handleStockPerformanceChange() {
+  stockSessionId.value = null
+  stockTicketLevelId.value = null
+  await loadInventory()
+}
+
+async function handleStockSessionChange() {
+  stockTicketLevelId.value = null
+  await loadInventory()
 }
 
 function emptyPerformance() {
@@ -1305,19 +1536,28 @@ function emptyMovie() {
     summary: '',
     homeRecommended: false,
     homeSort: 0,
-    sessions: [emptyMovieSession()]
+    sessions: []
   }
 }
 
 function emptyMovieSession() {
+  const firstCinema = cinemas.value[0] || {}
   return {
-    city: '上海',
-    cinemaId: cinemas.value[0]?.id || null,
-    cinemaName: cinemas.value[0]?.name || '',
+    city: firstCinema.cityName || cinemaCityOptions.value[0] || '',
+    cinemaId: firstCinema.id || null,
+    cinemaName: firstCinema.name || '',
     hallName: '1号厅',
-    startTime: '2026-08-01 19:30:00',
+    startTime: '',
     price: 68
   }
+}
+
+function emptyCinemaSchedule() {
+  return { movieId: null, hallName: '', startTime: '', price: 68 }
+}
+
+function emptyStaffUser() {
+  return { username: '', nickname: '', password: '', roleCode: 'CHECKER' }
 }
 
 async function uploadSelectedImage(event, callback) {
@@ -1343,6 +1583,17 @@ async function setPerformancePoster(event) {
     })
   } finally {
     uploadingPoster.value = false
+  }
+}
+
+async function setMoviePoster(event) {
+  uploadingMoviePoster.value = true
+  try {
+    await uploadSelectedImage(event, (value) => {
+      movieForm.poster = value
+    })
+  } finally {
+    uploadingMoviePoster.value = false
   }
 }
 
@@ -1373,6 +1624,21 @@ function looksLikeLocalImagePath(path) {
 async function importPerformancePosterIfLocal() {
   if (!looksLikeLocalImagePath(performanceForm.poster)) return
   await importPerformancePoster()
+}
+
+async function importMoviePoster() {
+  if (!movieForm.poster) {
+    ElMessage.warning('请先填写本机图片路径')
+    return
+  }
+  const result = await adminApi.uploadLocalImage(movieForm.poster)
+  movieForm.poster = result.path
+  ElMessage.success('电影海报已导入 uploads')
+}
+
+async function importMoviePosterIfLocal() {
+  if (!looksLikeLocalImagePath(movieForm.poster)) return
+  await importMoviePoster()
 }
 
 async function importBlockImage(index) {
@@ -1620,13 +1886,13 @@ function openMovie(row) {
   resetReactive(movieForm, { ...emptyMovie(), ...(row ? clone(row) : {}) })
   movieForm.sessions = movieForm.sessions?.length
     ? movieForm.sessions.map((session) => ({ ...emptyMovieSession(), ...session, cinemaId: session.venueId || session.cinemaId, cinemaName: session.cinemaName || cinemaName(session.venueId) }))
-    : [emptyMovieSession()]
+    : []
   movieDialog.value = true
 }
 
 function addMovieSession() {
-  const last = movieForm.sessions.at(-1) || emptyMovieSession()
-  movieForm.sessions.push({ ...emptyMovieSession(), ...last, startTime: addHours(last.startTime, 2) })
+  const last = movieForm.sessions.at(-1)
+  movieForm.sessions.push(last ? { ...emptyMovieSession(), ...last, startTime: addHours(last.startTime, 2) } : emptyMovieSession())
 }
 
 function removeMovieSession(index) {
@@ -1634,8 +1900,9 @@ function removeMovieSession(index) {
 }
 
 async function saveMovie() {
+  await importMoviePosterIfLocal()
   const payload = clone(movieForm)
-  payload.sessions = payload.sessions.map((session) => {
+  payload.sessions = payload.sessions.filter((session) => session.startTime && session.cinemaId).map((session) => {
     const cinema = cinemas.value.find((item) => String(item.id) === String(session.cinemaId))
     return {
       ...session,
@@ -1733,6 +2000,35 @@ async function saveCinema() {
   ElMessage.success('电影院已保存，默认座位图已生成')
   cinemaDialog.value = false
   await loadAll()
+}
+
+async function openCinemaSchedules(row) {
+  activeCinema.value = row
+  cinemaScheduleDialog.value = true
+  cinemaScheduleSeats.value = []
+  resetReactive(cinemaScheduleForm, emptyCinemaSchedule())
+  cinemaScheduleForm.hallName = row.halls?.[0]?.name || ''
+  cinemaScheduleForm.movieId = movies.value[0]?.id || null
+  cinemaSchedules.value = await adminApi.cinemaSchedules(row.id)
+}
+
+async function saveCinemaSchedule() {
+  if (!activeCinema.value) return
+  await adminApi.saveCinemaSchedule(activeCinema.value.id, cinemaScheduleForm)
+  ElMessage.success('排片已保存')
+  cinemaSchedules.value = await adminApi.cinemaSchedules(activeCinema.value.id)
+  resetReactive(cinemaScheduleForm, { ...emptyCinemaSchedule(), movieId: cinemaScheduleForm.movieId, hallName: cinemaScheduleForm.hallName })
+  await loadAll()
+}
+
+async function viewCinemaScheduleSeats(row) {
+  cinemaScheduleSeats.value = await adminApi.sessionSeats(row.sessionId)
+}
+
+async function createStaffUser() {
+  await adminApi.createStaffUser(staffForm)
+  ElMessage.success('账号已创建')
+  resetReactive(staffForm, emptyStaffUser())
 }
 
 async function deleteCinema(row) {
@@ -2211,4 +2507,54 @@ onBeforeUnmount(() => {
   document.removeEventListener('selectionchange', handleDocumentSelectionChange)
 })
 </script>
+
+<style scoped>
+.admin-order-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-order-cell img {
+  width: 44px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #f3f4f6;
+  flex: 0 0 auto;
+}
+
+.admin-order-cell div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-order-cell small {
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cinema-schedule-form {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1.5fr 120px auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.cinema-seat-preview {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.stock-filter-actions {
+  grid-template-columns: repeat(3, minmax(180px, 1fr)) auto;
+}
+</style>
 

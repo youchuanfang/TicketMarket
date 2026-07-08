@@ -20,6 +20,9 @@ export const adminApi = {
   createCinema: (payload) => http.post('/api/admin/cinemas', payload),
   updateCinema: (id, payload) => http.put(`/api/admin/cinemas/${id}`, payload),
   deleteCinema: (id) => http.delete(`/api/admin/cinemas/${id}`),
+  cinemaSchedules: (id) => http.get(`/api/admin/cinemas/${id}/schedules`),
+  saveCinemaSchedule: (id, payload) => http.post(`/api/admin/cinemas/${id}/schedules`, payload),
+  createStaffUser: (payload) => http.post('/api/admin/staff-users', payload),
   detailBlocks: (id) => http.get(`/api/admin/performances/${id}/detail-blocks`),
   createDetailBlock: (id, payload) => http.post(`/api/admin/performances/${id}/detail-blocks`, payload),
   updateDetailBlock: (id, payload) => http.put(`/api/admin/performance-detail-blocks/${id}`, payload),
@@ -60,5 +63,7 @@ export const adminApi = {
   lockBatch: (id) => http.post(`/api/admin/sale-batches/${id}/lock`),
   initRedisStock: (id) => http.post(`/api/admin/sale-batches/${id}/init-redis-stock`),
   batchSummary: (id) => http.get(`/api/admin/sale-batches/${id}/stock-summary`),
-  stockPool: () => http.get('/api/admin/stock-pool')
+  inventory: (params = {}) => http.get('/api/admin/inventory', { params }),
+  stockPool: () => http.get('/api/admin/stock-pool'),
+  sessionStockPool: (sessionId) => http.get(`/api/admin/sessions/${sessionId}/stock-pool`)
 }

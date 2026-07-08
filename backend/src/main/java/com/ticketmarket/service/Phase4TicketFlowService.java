@@ -324,7 +324,7 @@ public class Phase4TicketFlowService {
                 .filter(item -> performanceId == null || reservationMatchesPerformance(item, performanceId))
                 .sorted((a, b) -> String.valueOf(b.get("createdAt")).compareTo(String.valueOf(a.get("createdAt"))))
                 .findFirst()
-                .map(this::copy)
+                .map(this::displayOrder)
                 .orElse(Map.of());
     }
 
@@ -368,7 +368,10 @@ public class Phase4TicketFlowService {
     }
 
     public List<Map<String, Object>> adminOrders() {
-        return orders.values().stream().map(this::copy).toList();
+        return orders.values().stream()
+                .sorted((a, b) -> String.valueOf(b.get("createdAt")).compareTo(String.valueOf(a.get("createdAt"))))
+                .map(this::displayOrder)
+                .toList();
     }
 
     public Map<String, Object> order(Long id, Long userId) {
@@ -379,7 +382,7 @@ public class Phase4TicketFlowService {
         if (userId != null && !Objects.equals(order.get("userId"), userId)) {
             throw new ApiException(403, "无权限查看该订单");
         }
-        return copy(order);
+        return displayOrder(order);
     }
 
     public synchronized Map<String, Object> cancelOrder(Long id, Long userId) {
@@ -539,7 +542,7 @@ public class Phase4TicketFlowService {
     }
 
     public List<Map<String, Object>> adminRefunds() {
-        return refunds.values().stream().map(this::copy).toList();
+        return refunds.values().stream().map(this::displayRefund).toList();
     }
 
     public synchronized Map<String, Object> approveRefund(Long id) {
@@ -809,7 +812,13 @@ public class Phase4TicketFlowService {
                     from order_item where order_id = ?
                     """, id);
             Long ticketLevelId = items.isEmpty() ? null : longValue(items.get(0), "ticketLevelId", null);
-            Map<String, Object> level = ticketLevelId == null ? Map.of("name", "") : resourceService.ticketLevel(ticketLevelId);
+            Map<String, Object> level;
+            try {
+                level = ticketLevelId == null ? Map.of("name", "") : resourceService.ticketLevel(ticketLevelId);
+            } catch (ApiException ex) {
+                jdbcTemplate.update("update ticket_order set deleted=1, status='CANCELLED', updated_at=now() where id=?", id);
+                return;
+            }
             orders.put(id, map(
                     "id", id,
                     "orderNo", rs.getString("orderNo"),
@@ -1128,6 +1137,44 @@ public class Phase4TicketFlowService {
 
     private String stockKey(Long batchId, Long ticketLevelId) {
         return "ticket:batch:" + batchId + ":level:" + ticketLevelId + ":stock";
+    }
+
+    private Map<String, Object> displayRefund(Map<String, Object> refund) {
+        Map<String, Object> row = copy(refund);
+        Long orderIdValue = longValue(row, "orderId", null);
+        if (orderIdValue != null && orders.containsKey(orderIdValue)) {
+            row.put("order", displayOrder(orders.get(orderIdValue)));
+        }
+        return row;
+    }
+
+    private Map<String, Object> displayOrder(Map<String, Object> order) {
+        Map<String, Object> row = copy(order);
+        Long sessionId = longValue(row, "sessionId", null);
+        if (sessionId == null) return row;
+        try {
+            Map<String, Object> info = jdbcTemplate.queryForMap("""
+                    select ps.id sessionId, date_format(ps.start_time, '%Y-%m-%d %H:%i:%s') sessionTime,
+                           coalesce(ps.session_name, ps.hall_name) sessionName,
+                           v.name venueName, v.city_name cityName,
+                           coalesce(p.title, m.title, ps.session_name, ps.hall_name) itemTitle,
+                           coalesce(p.poster_path, m.poster_path, '') poster,
+                           case when ps.movie_id is null then 'PERFORMANCE' else 'MOVIE' end itemType,
+                           coalesce(ps.performance_id, ps.movie_id) itemId
+                    from performance_session ps
+                    left join performance p on p.id=ps.performance_id and p.deleted=0
+                    left join movie m on m.id=ps.movie_id and m.deleted=0
+                    left join venue v on v.id=ps.venue_id
+                    where ps.id=?
+                    """, sessionId);
+            row.putAll(info);
+        } catch (Exception ignored) {
+            row.putIfAbsent("itemTitle", row.getOrDefault("ticketLevelName", "订单"));
+        }
+        row.put("unitPrice", new BigDecimal(String.valueOf(row.getOrDefault("totalAmount", "0")))
+                .divide(BigDecimal.valueOf(Math.max(1, intValue(row, "quantity", 1))), 2, java.math.RoundingMode.HALF_UP));
+        row.put("refundAvailable", "TICKET_ISSUED".equals(row.get("status")));
+        return row;
     }
 
     private String now() {

@@ -1240,6 +1240,22 @@ button {
   width: 320px;
 }
 
+.stock-filter-actions .el-select {
+  width: 260px;
+}
+
+.stock-pool-subtable {
+  margin-top: 24px;
+}
+
+.compact-head {
+  margin-bottom: 10px;
+}
+
+.muted-text {
+  color: #64748b;
+}
+
 .admin-flow {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -1349,7 +1365,7 @@ button {
 
 .upload-row {
   display: grid;
-  grid-template-columns: 96px minmax(150px, auto) minmax(0, 1fr);
+  grid-template-columns: 96px minmax(150px, auto) minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   width: 100%;

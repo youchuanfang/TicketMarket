@@ -780,6 +780,55 @@ public class Phase3ResourceService {
                 """);
     }
 
+    public List<Map<String, Object>> inventory(Long performanceId, Long sessionId, Long ticketLevelId) {
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" where tl.deleted=0 and ps.deleted=0 and ps.movie_id is null ");
+        if (performanceId != null) {
+            where.append(" and ps.performance_id=? ");
+            args.add(performanceId);
+        }
+        if (sessionId != null) {
+            where.append(" and ps.id=? ");
+            args.add(sessionId);
+        }
+        if (ticketLevelId != null) {
+            where.append(" and tl.id=? ");
+            args.add(ticketLevelId);
+        }
+        List<Map<String, Object>> rows = rows("""
+                select ps.id sessionId,
+                       ps.performance_id performanceId,
+                       coalesce(p.title, ps.session_name, ps.hall_name) itemTitle,
+                       coalesce(ps.session_name, ps.hall_name) sessionName,
+                       date_format(ps.start_time, '%Y-%m-%d %H:%i:%s') startTime,
+                       v.name venueName,
+                       tl.id ticketLevelId, tl.name ticketLevelName, tl.price,
+                       tl.total_stock totalStock, tl.released_stock releasedStock,
+                       tl.unreleased_stock unreleasedStock, tl.sold_stock soldStock,
+                       tl.locked_stock lockedStock, tl.refunded_stock refundedStock,
+                       tl.status status,
+                       coalesce(sum(case when sp.status='WAITING_RELEASE' then 1 else 0 end), 0) waitingPoolStock,
+                       coalesce(sum(case when sp.status='RELEASED' then 1 else 0 end), 0) releasedPoolStock
+                from ticket_level tl
+                join performance_session ps on ps.id=tl.session_id
+                left join performance p on p.id=ps.performance_id and p.deleted=0
+                left join venue v on v.id=ps.venue_id
+                left join stock_pool sp on sp.ticket_level_id=tl.id and sp.session_id=ps.id
+                """ + where + """
+                group by ps.id, ps.performance_id, p.title, ps.session_name, ps.hall_name, ps.start_time, v.name,
+                         tl.id, tl.name, tl.price, tl.total_stock, tl.released_stock, tl.unreleased_stock,
+                         tl.sold_stock, tl.locked_stock, tl.refunded_stock, tl.status
+                order by ps.start_time desc, ps.id desc, tl.price, tl.id
+                """, args.toArray());
+        rows.forEach(row -> {
+            int released = intValue(row, "releasedStock", 0);
+            int sold = intValue(row, "soldStock", 0);
+            int locked = intValue(row, "lockedStock", 0);
+            row.put("availableStock", Math.max(0, released - sold - locked));
+        });
+        return rows;
+    }
+
     public List<Map<String, Object>> stockPoolBySession(Long sessionId) {
         return rows("""
                 select id, session_id sessionId, ticket_level_id ticketLevelId, session_seat_id seatId,
@@ -924,7 +973,8 @@ public class Phase3ResourceService {
 
     private String sessionSelect() {
         return """
-                select ps.id, ps.performance_id performanceId, ps.venue_id venueId,
+                select ps.id, ps.performance_id performanceId, ps.movie_id movieId, ps.venue_id venueId,
+                       p.title performanceTitle, m.title movieTitle,
                        coalesce(ps.session_name, ps.hall_name) sessionName,
                        date_format(ps.sale_start_time, '%Y-%m-%d %H:%i:%s') saleStartTime,
                        date_format(ps.lock_time, '%Y-%m-%d %H:%i:%s') lockTime,
@@ -934,6 +984,8 @@ public class Phase3ResourceService {
                        coalesce(ps.purchase_mode, ps.sale_mode) purchaseMode,
                        ps.status, ps.created_at createdAt, ps.updated_at updatedAt
                 from performance_session ps
+                left join performance p on p.id=ps.performance_id and p.deleted=0
+                left join movie m on m.id=ps.movie_id and m.deleted=0
                 """;
     }
 
