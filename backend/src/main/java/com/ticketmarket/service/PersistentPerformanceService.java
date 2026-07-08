@@ -40,11 +40,13 @@ public class PersistentPerformanceService {
     private final JdbcTemplate jdbcTemplate;
     private final JdbcClient jdbcClient;
     private final DemoDataService demoDataService;
+    private final Phase3ResourceService resourceService;
 
-    public PersistentPerformanceService(JdbcTemplate jdbcTemplate, DemoDataService demoDataService) {
+    public PersistentPerformanceService(JdbcTemplate jdbcTemplate, DemoDataService demoDataService, Phase3ResourceService resourceService) {
         this.jdbcTemplate = jdbcTemplate;
         this.jdbcClient = JdbcClient.create(jdbcTemplate);
         this.demoDataService = demoDataService;
+        this.resourceService = resourceService;
     }
 
     @PostConstruct
@@ -113,6 +115,13 @@ public class PersistentPerformanceService {
     @Transactional
     public PerformanceCard updatePerformance(Long id, Map<String, Object> payload) {
         ensureExists(id);
+        LocalDateTime defaultSaleStart = defaultSaleStartTime(payload);
+        Timestamp refundFreeUntil = configuredTime(payload, "refundFreeUntil",
+                defaultSaleStart == null ? null : Timestamp.valueOf(defaultSaleStart.plusDays(1)));
+        Timestamp refundFeeUntil = configuredTime(payload, "refundFeeUntil",
+                defaultSaleStart == null ? null : Timestamp.valueOf(defaultSaleStart.plusDays(14)));
+        Timestamp refundStopTime = configuredTime(payload, "refundStopTime",
+                defaultRefundStopTime(payload, defaultSaleStart));
         jdbcTemplate.update("""
                 update performance set
                   title=?, subtitle=?, category_id=?, category_name=?, city_id=?, city_name=?,
@@ -144,9 +153,9 @@ public class PersistentPerformanceService {
                 str(payload, "venueIntro", ""),
                 str(payload, "purchaseNotice", ""),
                 str(payload, "refundRule", str(payload, "refundNotice", "")),
-                timeFromText(str(payload, "refundFreeUntil", "")),
-                timeFromText(str(payload, "refundFeeUntil", "")),
-                timeFromText(str(payload, "refundStopTime", "")),
+                refundFreeUntil,
+                refundFeeUntil,
+                refundStopTime,
                 str(payload, "entryRule", str(payload, "entryNotice", "")),
                 serviceTags(payload.get("tags"), str(payload, "tagsText", str(payload, "serviceTags", ""))),
                 str(payload, "saleMode", str(payload, "purchaseMode", "SELECTABLE")),
@@ -251,6 +260,13 @@ public class PersistentPerformanceService {
     }
 
     private Long insertPerformance(Map<String, Object> payload, String publishStatus) {
+        LocalDateTime defaultSaleStart = defaultSaleStartTime(payload);
+        Timestamp refundFreeUntil = configuredTime(payload, "refundFreeUntil",
+                defaultSaleStart == null ? null : Timestamp.valueOf(defaultSaleStart.plusDays(1)));
+        Timestamp refundFeeUntil = configuredTime(payload, "refundFeeUntil",
+                defaultSaleStart == null ? null : Timestamp.valueOf(defaultSaleStart.plusDays(14)));
+        Timestamp refundStopTime = configuredTime(payload, "refundStopTime",
+                defaultRefundStopTime(payload, defaultSaleStart));
         jdbcTemplate.update("""
                 insert into performance
                 (title, subtitle, category_id, category_name, city_id, city_name, venue_id, venue_name, address,
@@ -281,9 +297,9 @@ public class PersistentPerformanceService {
                 str(payload, "venueIntro", ""),
                 str(payload, "purchaseNotice", ""),
                 str(payload, "refundRule", str(payload, "refundNotice", "")),
-                timeFromText(str(payload, "refundFreeUntil", "")),
-                timeFromText(str(payload, "refundFeeUntil", "")),
-                timeFromText(str(payload, "refundStopTime", "")),
+                refundFreeUntil,
+                refundFeeUntil,
+                refundStopTime,
                 str(payload, "entryRule", str(payload, "entryNotice", "")),
                 serviceTags(payload.get("tags"), str(payload, "tagsText", str(payload, "serviceTags", ""))),
                 str(payload, "saleMode", str(payload, "purchaseMode", "SELECTABLE")),
@@ -388,6 +404,49 @@ public class PersistentPerformanceService {
         List<String> dates = publishingDates(payload);
         if (dates.isEmpty()) return timeValue(payload, "startTime", null);
         return Timestamp.valueOf(LocalDateTime.parse(dates.stream().sorted().findFirst().orElse(dates.get(0)), FORMATTER));
+    }
+
+    private LocalDateTime firstSessionStartTime(Map<String, Object> payload) {
+        List<String> dates = publishingDates(payload);
+        if (!dates.isEmpty()) return LocalDateTime.parse(dates.stream().sorted().findFirst().orElse(dates.get(0)), FORMATTER);
+        Timestamp start = timeValue(payload, "startTime", null);
+        return start == null ? null : start.toLocalDateTime();
+    }
+
+    private LocalDateTime defaultSaleStartTime(Map<String, Object> payload) {
+        LocalDateTime firstStart = firstSessionStartTime(payload);
+        return firstStart == null ? null : defaultSaleStartTime(FORMATTER.format(firstStart));
+    }
+
+    private LocalDateTime defaultSaleStartTime(String firstStartText) {
+        LocalDateTime firstStart = LocalDateTime.parse(normalizeDateTime(firstStartText), FORMATTER);
+        int minuteOfDay = deterministicSaleMinute(firstStartText);
+        return firstStart.minusMonths(1)
+                .withHour(minuteOfDay / 60)
+                .withMinute(minuteOfDay % 60)
+                .withSecond(0)
+                .withNano(0);
+    }
+
+    private Timestamp defaultRefundStopTime(Map<String, Object> payload, LocalDateTime saleStart) {
+        LocalDateTime firstStart = firstSessionStartTime(payload);
+        if (firstStart == null || saleStart == null) return null;
+        return Timestamp.valueOf(firstStart.minusDays(7)
+                .withHour(saleStart.getHour())
+                .withMinute(saleStart.getMinute())
+                .withSecond(0)
+                .withNano(0));
+    }
+
+    private int deterministicSaleMinute(String seed) {
+        int min = 9 * 60;
+        int max = 18 * 60;
+        return min + Math.floorMod(Objects.toString(seed, "").hashCode(), max - min + 1);
+    }
+
+    private Timestamp configuredTime(Map<String, Object> payload, String key, Timestamp fallback) {
+        Timestamp value = timeFromText(str(payload, key, ""));
+        return value == null ? fallback : value;
     }
 
     private LocalDateTime localDateTime(Object value) {
@@ -506,7 +565,7 @@ public class PersistentPerformanceService {
                 order by id limit 1
                 """, Long.class, performanceId, Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER)));
         String sessionName = str(payload, "title", "演出") + " " + startTime.substring(5, 16);
-        Timestamp saleStart = timeFromText(str(payload, "quickSaleStartTime", str(payload, "startTime", startTime)));
+        Timestamp saleStart = configuredTime(payload, "quickSaleStartTime", Timestamp.valueOf(defaultSaleStartTime(startTime)));
         Timestamp lockTime = timeFromText(str(payload, "quickLockTime", ""));
         if (lockTime == null) lockTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).minusHours(1));
         Timestamp entryTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).minusHours(1));
@@ -560,7 +619,7 @@ public class PersistentPerformanceService {
     }
 
     private void ensurePublishingBatch(Long sessionId, Map<String, Object> payload, String startTime, List<Map<String, Object>> levels) {
-        Timestamp saleStart = timeFromText(str(payload, "quickSaleStartTime", str(payload, "startTime", startTime)));
+        Timestamp saleStart = configuredTime(payload, "quickSaleStartTime", Timestamp.valueOf(defaultSaleStartTime(startTime)));
         Timestamp lockTime = timeFromText(str(payload, "quickLockTime", ""));
         if (lockTime == null) lockTime = Timestamp.valueOf(LocalDateTime.parse(startTime, FORMATTER).minusHours(1));
         List<Long> existing = jdbcTemplate.queryForList("""
@@ -644,7 +703,7 @@ public class PersistentPerformanceService {
         card.setPoster(rs.getString("poster_path"));
         card.setBanner(rs.getString("banner_path"));
         card.setDetailImage(rs.getString("detail_image_path"));
-        card.setSaleStatus(rs.getString("status"));
+        card.setSaleStatus(dynamicSaleStatus(card.getId(), rs.getString("status")));
         card.setSaleMode(rs.getString("purchase_mode"));
         card.setPublishStatus(rs.getString("publish_status"));
         card.setHomeRecommended(rs.getBoolean("home_recommended"));
@@ -663,6 +722,15 @@ public class PersistentPerformanceService {
         card.setEntryRule(rs.getString("entry_notice"));
         card.setTicketLevels(List.of(new TicketLevel(card.getId() * 1000 + 1, "标准票", "", card.getPriceMin(), 0)));
         return card;
+    }
+
+    private String dynamicSaleStatus(Long performanceId, String fallback) {
+        try {
+            Object status = resourceService.frontPerformanceStatus(performanceId).get("status");
+            return status == null || String.valueOf(status).isBlank() ? fallback : String.valueOf(status);
+        } catch (RuntimeException ex) {
+            return fallback;
+        }
     }
 
     private Map<String, Object> detailBlock(ResultSet rs) throws SQLException {

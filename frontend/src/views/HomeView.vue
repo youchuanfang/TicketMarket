@@ -27,7 +27,7 @@
     <section class="content-band">
       <SectionHeader eyebrow="Hot Picks" title="热门推荐" to="/search?status=ON_SALE" />
       <div class="event-grid">
-        <PerformanceCard v-for="item in home.hot" :key="item.id" :item="item" />
+        <PerformanceCard v-for="item in home.hot" :key="`${item.targetType}-${item.targetId}`" :item="item" />
       </div>
     </section>
 
@@ -51,18 +51,7 @@
     <section v-for="section in home.categorySections" :key="section.code" class="content-band">
       <SectionHeader :title="section.name" :to="`/category/${section.code}`" />
       <div class="event-grid">
-        <PerformanceCard v-for="item in section.items" :key="item.id" :item="item" />
-      </div>
-    </section>
-
-    <section class="content-band">
-      <SectionHeader title="电影热映" to="/category/movie" />
-      <div class="movie-row">
-        <RouterLink v-for="movie in home.movies" :key="movie.id" class="movie-card" :to="movie.detailPath || `/movies/${movie.id}`">
-          <img :src="assetUrl(movie.poster)" :alt="movie.title" />
-          <strong>{{ movie.title }}</strong>
-          <span>{{ movie.genre }}</span>
-        </RouterLink>
+        <PerformanceCard v-for="item in section.items" :key="`${item.targetType}-${item.targetId}`" :item="item" />
       </div>
     </section>
 

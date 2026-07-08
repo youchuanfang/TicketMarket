@@ -5,10 +5,10 @@ import com.ticketmarket.model.Category;
 import com.ticketmarket.model.MovieCard;
 import com.ticketmarket.model.PerformanceCard;
 import com.ticketmarket.service.DemoDataService;
+import com.ticketmarket.service.HomepageRecommendationService;
 import com.ticketmarket.service.PersistentMovieService;
 import com.ticketmarket.service.PersistentPerformanceService;
 import com.ticketmarket.service.Phase3ResourceService;
-import com.ticketmarket.service.HomepageRecommendationService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +31,11 @@ public class PortalController {
     private final Phase3ResourceService resourceService;
     private final HomepageRecommendationService homepageRecommendationService;
 
-    public PortalController(DemoDataService dataService, PersistentPerformanceService performanceService, PersistentMovieService movieService, Phase3ResourceService resourceService, HomepageRecommendationService homepageRecommendationService) {
+    public PortalController(DemoDataService dataService,
+                            PersistentPerformanceService performanceService,
+                            PersistentMovieService movieService,
+                            Phase3ResourceService resourceService,
+                            HomepageRecommendationService homepageRecommendationService) {
         this.dataService = dataService;
         this.performanceService = performanceService;
         this.movieService = movieService;
@@ -40,12 +45,16 @@ public class PortalController {
 
     @GetMapping("/home")
     public Result<Map<String, Object>> home() {
-        List<PerformanceCard> all = performanceService.publicPerformances().stream().map(this::withRealtimeSaleStatus).toList();
+        List<PerformanceCard> all = performanceService.publicPerformances().stream()
+                .map(this::withRealtimeSaleStatus)
+                .toList();
         List<MovieCard> movies = movieService.movies();
         Map<String, Object> recommendations = homepageRecommendationService.portalRecommendations(all, movies);
-        List<PerformanceCard> coming = all.stream().filter(item -> "COMING_SOON".equals(item.getSaleStatus())).limit(4).toList();
-        List<String> hotCities = allCities(all);
-        List<String> hotVenues = distinctPerformanceValues(all, false);
+        List<PerformanceCard> coming = all.stream()
+                .filter(item -> "COMING_SOON".equals(item.getSaleStatus()))
+                .limit(4)
+                .toList();
+        List<Map<String, Object>> hotItems = recommendationItems(recommendations.get("hot"));
         return Result.ok(Map.of(
                 "banners", recommendations.get("banners"),
                 "categories", dataService.categories(),
@@ -53,8 +62,8 @@ public class PortalController {
                 "comingSoon", coming,
                 "onSale", all.stream().filter(item -> "ON_SALE".equals(item.getSaleStatus())).limit(4).toList(),
                 "categorySections", recommendations.get("categorySections"),
-                "hotCities", hotCities.isEmpty() ? List.of("上海", "杭州", "南京", "深圳", "北京") : hotCities,
-                "hotVenues", hotVenues.isEmpty() ? List.of("滨江音乐中心", "湖畔剧院", "紫金艺术厅", "云顶体育馆") : hotVenues,
+                "hotCities", hotValues(hotItems, all, true),
+                "hotVenues", hotValues(hotItems, all, false),
                 "movies", recommendations.get("movies")
         ));
     }
@@ -132,6 +141,49 @@ public class PortalController {
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .limit(50)
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> recommendationItems(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
+                .toList();
+    }
+
+    private List<String> hotValues(List<Map<String, Object>> hotItems, List<PerformanceCard> performances, boolean city) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        String key = city ? "city" : "venue";
+        for (Map<String, Object> item : hotItems) {
+            addHotValue(values, Objects.toString(item.get(key), ""));
+            if (values.size() >= 4) return values.stream().toList();
+        }
+        for (String value : rankedUnendedValues(performances, city)) {
+            addHotValue(values, value);
+            if (values.size() >= 4) break;
+        }
+        return values.stream().limit(4).toList();
+    }
+
+    private void addHotValue(LinkedHashSet<String> values, String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (!normalized.isBlank()) values.add(normalized);
+    }
+
+    private List<String> rankedUnendedValues(List<PerformanceCard> performances, boolean city) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (PerformanceCard item : performances) {
+            if ("ENDED".equals(item.getSaleStatus())) continue;
+            String value = city ? item.getCity() : item.getVenue();
+            if (value == null || value.trim().isBlank()) continue;
+            counts.merge(value.trim(), 1, Integer::sum);
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder())
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(Map.Entry::getKey)
                 .toList();
     }
 
