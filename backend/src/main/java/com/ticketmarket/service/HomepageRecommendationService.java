@@ -17,6 +17,10 @@ import java.util.Objects;
 @Service
 public class HomepageRecommendationService {
     private static final int MAX_SECTION_ITEMS = 4;
+    private static final List<String> SECTION_ORDER = List.of(
+            "concert", "drama", "music", "sports", "festival", "movie",
+            "family", "exhibition", "quyi", "dance", "anime", "travel"
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final DemoDataService demoDataService;
@@ -36,11 +40,20 @@ public class HomepageRecommendationService {
     public List<Map<String, Object>> sections() {
         List<Map<String, Object>> sections = new ArrayList<>();
         sections.add(section("hot", "热门推荐", "", true, true));
+        Map<String, Category> categories = new LinkedHashMap<>();
         for (Category category : demoDataService.categories()) {
-            if ("movie".equals(category.code())) continue;
-            sections.add(section(category.code(), category.name(), category.code(), true, false));
+            categories.put(category.code(), category);
         }
-        sections.add(section("movie", "电影热映", "movie", false, true));
+        for (String code : SECTION_ORDER) {
+            if ("movie".equals(code)) {
+                sections.add(section("movie", "电影热映", "movie", false, true));
+                continue;
+            }
+            Category category = categories.get(code);
+            if (category != null) {
+                sections.add(section(category.code(), category.name(), category.code(), true, false));
+            }
+        }
         return sections;
     }
 
@@ -71,13 +84,14 @@ public class HomepageRecommendationService {
         hotCandidates.addAll(movies);
         List<Map<String, Object>> hot = selectedOrFallback("hot", hotCandidates);
         List<Map<String, Object>> categorySections = sections().stream()
-                .filter(section -> Boolean.TRUE.equals(section.get("performanceOnly")))
                 .filter(section -> !"hot".equals(section.get("code")))
                 .map(section -> {
                     String code = String.valueOf(section.get("code"));
-                    List<Map<String, Object>> candidates = performances.stream()
-                            .filter(item -> Objects.equals(item.get("categoryCode"), code))
-                            .toList();
+                    List<Map<String, Object>> candidates = "movie".equals(code)
+                            ? movies
+                            : performances.stream()
+                                    .filter(item -> Objects.equals(item.get("categoryCode"), code))
+                                    .toList();
                     return Map.<String, Object>of(
                             "code", code,
                             "name", section.get("name"),

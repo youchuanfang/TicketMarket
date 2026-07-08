@@ -157,6 +157,8 @@ public class PersistentMovieService {
             row.put("capacity", rs.getInt("capacity"));
             row.put("status", rs.getString("status"));
             row.put("description", rs.getString("description"));
+            row.put("venueType", "CINEMA");
+            row.put("stageLabel", "银幕");
             row.put("halls", cinemaHalls(rs.getLong("id")));
             row.put("hallCount", ((List<?>) row.get("halls")).size());
             return row;
@@ -221,6 +223,8 @@ public class PersistentMovieService {
             row.put("capacity", rs.getInt("capacity"));
             row.put("status", rs.getString("status"));
             row.put("description", rs.getString("description"));
+            row.put("venueType", "CINEMA");
+            row.put("stageLabel", "银幕");
             row.put("halls", cinemaHalls(rs.getLong("id")));
             row.put("hallCount", ((List<?>) row.get("halls")).size());
             return row;

@@ -249,11 +249,12 @@
           </div>
         </div>
         <div class="resource-form">
-          <el-select v-model="seatForm.venueId" placeholder="选择场馆" @change="loadAreasForSeatForm">
-            <el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" />
+          <el-select v-model="seatForm.venueId" placeholder="选择场馆或电影院" filterable @change="loadAreasForSeatForm">
+            <el-option v-for="venue in seatVenueOptions" :key="venue.id" :label="`${venue.name}（${venueTypeText(venue.venueType)}）`" :value="venue.id" />
           </el-select>
           <el-select v-model="seatForm.layoutType" placeholder="座位图模板">
             <el-option label="标准排座" value="STANDARD" />
+            <el-option label="电影院 4 排 6 座" value="CINEMA" />
             <el-option label="体育场馆 / 舞台环形看台" value="STADIUM" />
           </el-select>
           <el-select v-model="seatForm.areaId" placeholder="选择区域">
@@ -264,18 +265,18 @@
           <el-input-number v-model="seatForm.seatsPerRow" :min="1" placeholder="每排座位" />
           <el-input v-model="seatForm.aisleAfterSeats" placeholder="过道位置，如 8,16" />
         </div>
-        <SeatSvg :seats="previewSeats" :venue="venues.find((venue) => venue.id === seatForm.venueId)" selectable />
+        <SeatSvg :seats="previewSeats" :venue="seatVenueById(seatForm.venueId)" selectable @seat-click="openSeatEditor" />
       </section>
 
       <section v-else-if="activeSection === 'venue-seats'" class="admin-card">
         <div class="table-head">
           <h2>{{ selectedVenue?.name || '场馆' }}座位图</h2>
           <div class="head-actions">
-            <el-tag>点击座位查看状态</el-tag>
+            <el-tag>点击座位可编辑</el-tag>
             <el-button type="danger" plain :disabled="!selectedVenue" @click="clearSeatTemplate(selectedVenue.id)">清空座位图</el-button>
           </div>
         </div>
-        <SeatSvg :seats="venueSeats" :venue="selectedVenue" selectable @seat-click="showSeat" />
+        <SeatSvg :seats="venueSeats" :venue="selectedVenue" selectable @seat-click="openSeatEditor" />
       </section>
 
       <section v-else-if="activeSection === 'session'" class="admin-card">
@@ -688,6 +689,34 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="seatEditDialog" title="编辑座位" width="520px">
+      <el-form label-position="top" class="dialog-form">
+        <el-form-item label="座位">
+          <el-input v-model="seatEditForm.seatLabel" disabled />
+        </el-form-item>
+        <el-form-item label="横向位置">
+          <el-input-number v-model="seatEditForm.x" :min="0" :max="760" />
+        </el-form-item>
+        <el-form-item label="纵向位置">
+          <el-input-number v-model="seatEditForm.y" :min="0" :max="560" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="seatEditForm.status">
+            <el-option label="可售" value="AVAILABLE" />
+            <el-option label="不可售" value="DISABLED" />
+            <el-option label="未开放" value="UNRELEASED" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="设为不可售座位">
+          <el-switch v-model="seatEditForm.isDisabled" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="seatEditDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveSeatEdit">保存座位</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="venueDialog" :title="venueForm.id ? '编辑场馆' : '新增场馆'" width="680px">
       <el-form label-position="top" class="dialog-form">
         <el-form-item label="场馆名称"><el-input v-model="venueForm.name" /></el-form-item>
@@ -903,6 +932,7 @@ const uploadingRichImages = ref(false)
 const performanceDialog = ref(false)
 const movieDialog = ref(false)
 const cinemaDialog = ref(false)
+const seatEditDialog = ref(false)
 const venueDialog = ref(false)
 const areaDialog = ref(false)
 const sessionDialog = ref(false)
@@ -911,6 +941,7 @@ const batchDialog = ref(false)
 const performanceForm = reactive(emptyPerformance())
 const movieForm = reactive(emptyMovie())
 const cinemaForm = reactive(emptyCinema())
+const seatEditForm = reactive(emptySeatEdit())
 const venueForm = reactive(emptyVenue())
 const areaForm = reactive(emptyArea())
 const sessionForm = reactive(emptySession())
@@ -962,7 +993,7 @@ const statusMap = {
 const purchaseModeMap = { SELECTABLE: '自主选座', AUTO_ALLOCATE: '系统配座', AREA_ONLY: '只选区域', STANDING: '站席' }
 const releaseTypeMap = { FULL: '全部开放', PARTIAL: '分批开放', MANUAL: '手动开放', QUANTITY: '按数量', RATIO: '按比例' }
 const areaTypeMap = { SEATED: '看台/有座', STANDING: '内场/站席' }
-const venueTypeMap = { THEATER: '剧院/剧场', STADIUM: '体育场馆' }
+const venueTypeMap = { THEATER: '剧院/剧场', STADIUM: '体育场馆', CINEMA: '电影院' }
 const sourceTypeMap = { POST_LOCK_RETURNED: '锁票回收', POST_LOCK_RETURN: '锁票回收', REFUND_WAITING_RELEASE: '退票待释放', REFUND_RETURN: '退票回流', UNRELEASED: '未开放库存', MANUAL_ADD: '人工调整' }
 
 const textFromMap = (map, value) => map[value] || value || '暂无数据'
@@ -982,7 +1013,9 @@ const activeSection = computed(() => {
 const visibleMenus = computed(() => menus.filter((item) => item.roles.includes(user.role)))
 const activeMenu = computed(() => menus.find((item) => item.key === activeSection.value))
 const roleText = computed(() => roleMap[user.role] || user.role)
-const selectedVenue = computed(() => venues.value.find((item) => String(item.id) === String(route.params.id || seatForm.venueId)))
+const seatVenueOptions = computed(() => [...venues.value, ...cinemas.value.map((item) => ({ ...item, venueType: item.venueType || 'CINEMA', stageLabel: item.stageLabel || '银幕' }))])
+const seatVenueById = (id) => seatVenueOptions.value.find((item) => String(item.id) === String(id))
+const selectedVenue = computed(() => seatVenueById(route.params.id || seatForm.venueId))
 const selectedPerformanceVenue = computed(() => venues.value.find((item) => String(item.id) === String(performanceForm.venueId)))
 const activeHomeSection = computed(() => homepageRecommendations.value.find((item) => item.code === activeHomeSectionCode.value) || homepageRecommendations.value[0])
 const activeHomeCandidates = computed(() => activeHomeSection.value?.candidates || [])
@@ -1049,7 +1082,7 @@ async function loadAll() {
     saleBatches.value = batchRows
     stockPool.value = poolRows
     if (!selectedSessionId.value && sessions.value.length) selectedSessionId.value = sessions.value[0].id
-    if (!seatForm.venueId && venues.value.length) seatForm.venueId = venues.value[0].id
+    if (!seatForm.venueId && seatVenueOptions.value.length) seatForm.venueId = seatVenueOptions.value[0].id
     await Promise.all([loadTicketLevels(), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
   }
   if (user.canUseChecker) Object.assign(checkerMetrics, await http.get('/api/checker/dashboard'))
@@ -1075,8 +1108,19 @@ async function loadVenueSeatsForRoute() {
 
 async function loadAreasForSeatForm() {
   if (!seatForm.venueId) return
-  const venue = venues.value.find((item) => item.id === seatForm.venueId)
+  const venue = seatVenueById(seatForm.venueId)
   if (venue?.venueType === 'STADIUM') seatForm.layoutType = 'STADIUM'
+  if (venue?.venueType === 'CINEMA') {
+    seatForm.layoutType = 'CINEMA'
+    seatForm.rowStart = 1
+    seatForm.rowEnd = 4
+    seatForm.seatsPerRow = 6
+    seatForm.startX = 245
+    seatForm.startY = 150
+    seatForm.gapX = 54
+    seatForm.gapY = 48
+    seatForm.aisleAfterSeats = ''
+  }
   seatFormAreas.value = await adminApi.areas(seatForm.venueId)
   if (!seatFormAreas.value.some((area) => area.id === seatForm.areaId)) {
     seatForm.areaId = seatFormAreas.value[0]?.id || null
@@ -1146,6 +1190,10 @@ function emptyCinema() {
 
 function emptyArea() {
   return { id: null, areaName: '', areaType: 'SEATED', defaultTicketLevel: '标准票', sortOrder: 1, color: '#d9303e' }
+}
+
+function emptySeatEdit() {
+  return { id: null, seatLabel: '', x: 0, y: 0, isAisle: false, isDisabled: false, status: 'AVAILABLE' }
 }
 
 function emptySession() {
@@ -2018,7 +2066,22 @@ async function clearSeatTemplate(venueId) {
   ElMessage.success(`已清空 ${result.deleted || 0} 个座位/场次座位`)
 }
 
-const showSeat = (seat) => ElMessage.info(`${seat.seatLabel}: ${statusText(seat.status)}`)
+function openSeatEditor(seat) {
+  resetReactive(seatEditForm, { ...emptySeatEdit(), ...clone(seat) })
+  seatEditDialog.value = true
+}
+
+async function saveSeatEdit() {
+  await adminApi.updateSeat(seatEditForm.id, seatEditForm)
+  seatEditDialog.value = false
+  if (route.params.id) {
+    await loadVenueSeatsForRoute()
+  }
+  if (String(seatForm.venueId || '') === String(seatEditForm.venueId || '')) {
+    previewSeats.value = await adminApi.seats(seatForm.venueId)
+  }
+  ElMessage.success('座位已保存')
+}
 
 function performanceSessions(performanceId) {
   return sessions.value.filter((session) => String(session.performanceId) === String(performanceId))
