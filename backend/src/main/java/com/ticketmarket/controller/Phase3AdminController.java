@@ -3,6 +3,8 @@ package com.ticketmarket.controller;
 import com.ticketmarket.common.Result;
 import com.ticketmarket.model.MovieCard;
 import com.ticketmarket.model.PerformanceCard;
+import com.ticketmarket.model.UserAccount;
+import com.ticketmarket.service.DemoDataService;
 import com.ticketmarket.service.PersistentMovieService;
 import com.ticketmarket.service.PersistentPerformanceService;
 import com.ticketmarket.service.Phase3ResourceService;
@@ -35,12 +37,14 @@ public class Phase3AdminController {
     private final PersistentPerformanceService performanceService;
     private final PersistentMovieService movieService;
     private final HomepageRecommendationService homepageRecommendationService;
+    private final DemoDataService demoDataService;
 
-    public Phase3AdminController(Phase3ResourceService service, PersistentPerformanceService performanceService, PersistentMovieService movieService, HomepageRecommendationService homepageRecommendationService) {
+    public Phase3AdminController(Phase3ResourceService service, PersistentPerformanceService performanceService, PersistentMovieService movieService, HomepageRecommendationService homepageRecommendationService, DemoDataService demoDataService) {
         this.service = service;
         this.performanceService = performanceService;
         this.movieService = movieService;
         this.homepageRecommendationService = homepageRecommendationService;
+        this.demoDataService = demoDataService;
     }
 
     @GetMapping("/performances")
@@ -134,6 +138,32 @@ public class Phase3AdminController {
     public Result<Void> deleteCinema(@PathVariable Long id) {
         movieService.deleteCinema(id);
         return Result.ok();
+    }
+
+    @GetMapping("/cinemas/{id}/schedules")
+    public Result<List<Map<String, Object>>> cinemaSchedules(@PathVariable Long id) {
+        return Result.ok(movieService.adminCinemaSchedules(id));
+    }
+
+    @PostMapping("/cinemas/{id}/schedules")
+    public Result<Map<String, Object>> saveCinemaSchedule(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return Result.ok(movieService.saveCinemaSchedule(id, payload));
+    }
+
+    @PostMapping("/staff-users")
+    public Result<Map<String, Object>> createStaffUser(@RequestBody Map<String, Object> payload) {
+        UserAccount account = demoDataService.createStaffUser(
+                String.valueOf(payload.getOrDefault("username", "")),
+                String.valueOf(payload.getOrDefault("password", "")),
+                String.valueOf(payload.getOrDefault("nickname", "")),
+                String.valueOf(payload.getOrDefault("roleCode", "CHECKER"))
+        );
+        return Result.ok(Map.of(
+                "id", account.getId(),
+                "username", account.getUsername(),
+                "nickname", account.getNickname(),
+                "roleCode", account.getRoleCode()
+        ));
     }
 
     @GetMapping("/performances/{id}/detail-blocks")
@@ -402,10 +432,11 @@ public class Phase3AdminController {
 
     @GetMapping("/inventory")
     public Result<List<Map<String, Object>>> inventory(
+            @RequestParam(required = false) Long performanceId,
             @RequestParam(required = false) Long sessionId,
             @RequestParam(required = false) Long ticketLevelId
     ) {
-        return Result.ok(service.inventory(sessionId, ticketLevelId));
+        return Result.ok(service.inventory(performanceId, sessionId, ticketLevelId));
     }
 
     @GetMapping("/stock-pool")

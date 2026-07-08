@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 @Service
 @DependsOn("databaseSchemaInitializer")
@@ -281,10 +283,66 @@ public class PersistentMovieService {
         return Map.of("dates", dates, "cinemas", cinemas.values().stream().toList(), "sessions", sessions);
     }
 
+    public List<Map<String, Object>> adminCinemaSchedules(Long cinemaId) {
+        cinema(cinemaId);
+        return jdbcTemplate.query("""
+                select ps.id sessionId, ps.movie_id movieId, m.title movieTitle, m.poster_path poster,
+                       ps.venue_id cinemaId, v.city_name city, v.name cinemaName,
+                       coalesce(ps.hall_name, ps.session_name) hallName,
+                       date_format(ps.start_time, '%Y-%m-%d %H:%i:%s') startTime,
+                       coalesce(min(tl.price), 0) price,
+                       coalesce(max(tl.released_stock), 0) stock,
+                       coalesce(max(tl.sold_stock), 0) soldStock
+                from performance_session ps
+                join movie m on m.id=ps.movie_id and m.deleted=0
+                join venue v on v.id=ps.venue_id and v.deleted=0
+                left join ticket_level tl on tl.session_id=ps.id and tl.deleted=0
+                where ps.venue_id=? and ps.movie_id is not null and ps.deleted=0
+                group by ps.id, ps.movie_id, m.title, m.poster_path, ps.venue_id, v.city_name, v.name, ps.hall_name, ps.session_name, ps.start_time
+                order by ps.start_time desc, ps.id desc
+                """, (rs, rowNum) -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("sessionId", rs.getLong("sessionId"));
+            row.put("movieId", rs.getLong("movieId"));
+            row.put("movieTitle", rs.getString("movieTitle"));
+            row.put("poster", rs.getString("poster"));
+            row.put("cinemaId", rs.getLong("cinemaId"));
+            row.put("city", rs.getString("city"));
+            row.put("cinemaName", rs.getString("cinemaName"));
+            row.put("hallName", rs.getString("hallName"));
+            row.put("startTime", rs.getString("startTime"));
+            row.put("price", rs.getBigDecimal("price"));
+            row.put("stock", rs.getInt("stock"));
+            row.put("soldStock", rs.getInt("soldStock"));
+            return row;
+        }, cinemaId);
+    }
+
+    @Transactional
+    public Map<String, Object> saveCinemaSchedule(Long cinemaId, Map<String, Object> payload) {
+        cinema(cinemaId);
+        Long movieId = longValue(payload.get("movieId"));
+        if (movieId == null) throw new ApiException(400, "请选择电影");
+        movie(movieId);
+        Map<String, Object> session = new LinkedHashMap<>(payload);
+        session.put("cinemaId", cinemaId);
+        Long areaId = ensureCinemaArea(cinemaId);
+        ensureCinemaSeats(cinemaId, areaId, 24);
+        int stock = Math.max(1, countCinemaSeats(cinemaId));
+        Long sessionId = ensureMovieSession(movieId, cinemaId, session);
+        ensureMovieTicketLevel(sessionId, areaId, intValue(session, "price", 68), stock);
+        resourceService.initSessionSeats(sessionId);
+        return adminCinemaSchedules(cinemaId).stream()
+                .filter(row -> Long.valueOf(String.valueOf(row.get("sessionId"))).equals(sessionId))
+                .findFirst()
+                .orElse(Map.of("sessionId", sessionId));
+    }
+
     @SuppressWarnings("unchecked")
     private void syncMovieSessions(Long movieId, Map<String, Object> payload) {
         Object raw = payload.get("sessions");
         if (!(raw instanceof List<?> list)) return;
+        Set<Long> keepSessionIds = new LinkedHashSet<>();
         for (Object item : list) {
             if (!(item instanceof Map<?, ?> rawMap)) continue;
             Map<String, Object> session = (Map<String, Object>) rawMap;
@@ -295,8 +353,18 @@ public class PersistentMovieService {
             ensureCinemaSeats(venueId, areaId, 24);
             int stock = Math.max(1, countCinemaSeats(venueId));
             Long sessionId = ensureMovieSession(movieId, venueId, session);
+            keepSessionIds.add(sessionId);
             ensureMovieTicketLevel(sessionId, areaId, intValue(session, "price", 68), stock);
             resourceService.initSessionSeats(sessionId);
+        }
+        if (keepSessionIds.isEmpty()) {
+            jdbcTemplate.update("update performance_session set deleted=1, status='CANCELLED', updated_at=now() where movie_id=? and deleted=0", movieId);
+        } else {
+            String placeholders = String.join(",", keepSessionIds.stream().map(id -> "?").toList());
+            List<Object> args = new ArrayList<>();
+            args.add(movieId);
+            args.addAll(keepSessionIds);
+            jdbcTemplate.update("update performance_session set deleted=1, status='CANCELLED', updated_at=now() where movie_id=? and deleted=0 and id not in (" + placeholders + ")", args.toArray());
         }
     }
 
@@ -387,7 +455,12 @@ public class PersistentMovieService {
 
     private Long ensureMovieSession(Long movieId, Long venueId, Map<String, Object> payload) {
         Timestamp start = timeValue(payload, "startTime", "2026-08-01 19:30:00");
-        List<Long> ids = jdbcTemplate.queryForList("select id from performance_session where movie_id=? and start_time=? and deleted=0 order by id limit 1", Long.class, movieId, start);
+        String hallName = str(payload, "hallName", "影厅");
+        List<Long> ids = jdbcTemplate.queryForList("""
+                select id from performance_session
+                where movie_id=? and venue_id=? and start_time=? and coalesce(hall_name, session_name)=? and deleted=0
+                order by id limit 1
+                """, Long.class, movieId, venueId, start, hallName);
         Timestamp saleStart = optionalTimeValue(payload, "saleStartTime");
         if (saleStart == null) saleStart = Timestamp.valueOf(LocalDateTime.now().minusMinutes(1));
         Timestamp lockTime = optionalTimeValue(payload, "lockTime");
