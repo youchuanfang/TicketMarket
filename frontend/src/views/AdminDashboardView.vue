@@ -916,6 +916,7 @@ const areaForm = reactive(emptyArea())
 const sessionForm = reactive(emptySession())
 const ticketLevelForm = reactive(emptyTicketLevel())
 const batchForm = reactive(emptyBatch())
+const autoSaleRefundDefaults = reactive({ sale: '', free: '', fee: '', stop: '' })
 const activeHomeSectionCode = ref('hot')
 
 const roleMap = { ADMIN: '系统管理员', MANAGER: '票务管理员', CHECKER: '检票员' }
@@ -1217,7 +1218,9 @@ async function openPerformance(row) {
       { type: 'PARAGRAPH', content: next.intro || next.summary || '' }
     ]
   }
+  Object.assign(autoSaleRefundDefaults, { sale: '', free: '', fee: '', stop: '' })
   resetReactive(performanceForm, { ...emptyPerformance(), ...next })
+  applyDefaultSaleRefundTimes()
   performanceDialog.value = true
   renderRichEditor()
 }
@@ -1698,10 +1701,12 @@ async function deleteCinema(row) {
 function addSessionDate() {
   const base = performanceForm.sessionDates.at(-1) || performanceForm.startTime || defaultSessionTime()
   performanceForm.sessionDates.push(addHours(base, 24))
+  applyDefaultSaleRefundTimes()
 }
 
 function removeSessionDate(index) {
   performanceForm.sessionDates.splice(index, 1)
+  applyDefaultSaleRefundTimes()
 }
 
 function normalizeDateTime(value) {
@@ -1727,6 +1732,63 @@ function defaultSessionTime() {
   date.setHours(19, 30, 0, 0)
   const pad = (value) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function parseDateTime(value) {
+  const normalized = normalizeDateTime(value).replace(' ', 'T')
+  const date = new Date(normalized)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatDateTime(date) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function stableSaleMinute(seed) {
+  let hash = 0
+  for (const char of String(seed || '')) hash = ((hash * 31) + char.charCodeAt(0)) | 0
+  const min = 9 * 60
+  const max = 18 * 60
+  return min + Math.abs(hash % (max - min + 1))
+}
+
+function defaultSaleRefundTimes(firstStartText) {
+  const firstStart = parseDateTime(firstStartText)
+  if (!firstStart) return null
+  const minute = stableSaleMinute(normalizeDateTime(firstStartText))
+  const sale = new Date(firstStart)
+  sale.setMonth(sale.getMonth() - 1)
+  sale.setHours(Math.floor(minute / 60), minute % 60, 0, 0)
+  const free = new Date(sale)
+  free.setDate(free.getDate() + 1)
+  const fee = new Date(sale)
+  fee.setDate(fee.getDate() + 14)
+  const stop = new Date(firstStart)
+  stop.setDate(stop.getDate() - 7)
+  stop.setHours(sale.getHours(), sale.getMinutes(), 0, 0)
+  return {
+    sale: formatDateTime(sale),
+    free: formatDateTime(free),
+    fee: formatDateTime(fee),
+    stop: formatDateTime(stop)
+  }
+}
+
+function applyDefaultSaleRefundTimes(force = false) {
+  const dates = [...new Set((performanceForm.sessionDates || []).map(normalizeDateTime).filter(Boolean))].sort()
+  const defaults = defaultSaleRefundTimes(dates[0] || performanceForm.startTime)
+  if (!defaults) return
+  const assignIfAuto = (field, key) => {
+    if (force || !performanceForm[field] || performanceForm[field] === autoSaleRefundDefaults[key]) {
+      performanceForm[field] = defaults[key]
+    }
+  }
+  assignIfAuto('quickSaleStartTime', 'sale')
+  assignIfAuto('refundFreeUntil', 'free')
+  assignIfAuto('refundFeeUntil', 'fee')
+  assignIfAuto('refundStopTime', 'stop')
+  Object.assign(autoSaleRefundDefaults, defaults)
 }
 
 function quickAreaName(level) {
@@ -1859,6 +1921,7 @@ async function savePerformance() {
   const dateRows = [...new Set((performanceForm.sessionDates || []).map(normalizeDateTime).filter(Boolean))].sort()
   performanceForm.sessionDates = dateRows
   performanceForm.startTime = dateRows[0] || ''
+  applyDefaultSaleRefundTimes()
   const payload = {
     ...clone(performanceForm),
     tags: performanceForm.tagsText.split(',').map((item) => item.trim()).filter(Boolean),
@@ -2071,6 +2134,12 @@ async function logout() {
 }
 
 watch(() => route.fullPath, () => loadAll())
+watch(
+  () => (performanceForm.sessionDates || []).map((item) => normalizeDateTime(item)).join('|'),
+  () => {
+    if (performanceDialog.value) applyDefaultSaleRefundTimes()
+  }
+)
 onMounted(() => {
   document.addEventListener('selectionchange', handleDocumentSelectionChange)
   loadAll()
