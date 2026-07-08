@@ -60,5 +60,7 @@ export const adminApi = {
   lockBatch: (id) => http.post(`/api/admin/sale-batches/${id}/lock`),
   initRedisStock: (id) => http.post(`/api/admin/sale-batches/${id}/init-redis-stock`),
   batchSummary: (id) => http.get(`/api/admin/sale-batches/${id}/stock-summary`),
-  stockPool: () => http.get('/api/admin/stock-pool')
+  inventory: (params = {}) => http.get('/api/admin/inventory', { params }),
+  stockPool: () => http.get('/api/admin/stock-pool'),
+  sessionStockPool: (sessionId) => http.get(`/api/admin/sessions/${sessionId}/stock-pool`)
 }

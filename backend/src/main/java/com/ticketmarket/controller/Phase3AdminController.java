@@ -400,6 +400,14 @@ public class Phase3AdminController {
         return Result.ok(service.batchStockSummary(id));
     }
 
+    @GetMapping("/inventory")
+    public Result<List<Map<String, Object>>> inventory(
+            @RequestParam(required = false) Long sessionId,
+            @RequestParam(required = false) Long ticketLevelId
+    ) {
+        return Result.ok(service.inventory(sessionId, ticketLevelId));
+    }
+
     @GetMapping("/stock-pool")
     public Result<List<Map<String, Object>>> stockPool() {
         return Result.ok(service.stockPool());

@@ -285,8 +285,8 @@
           <el-button type="primary" @click="openSession()">新增场次</el-button>
         </div>
         <el-table :data="sessions" border empty-text="暂无场次">
-          <el-table-column label="演出" min-width="180">
-            <template #default="{ row }">{{ performanceTitle(row.performanceId) }}</template>
+          <el-table-column label="项目" min-width="180">
+            <template #default="{ row }">{{ sessionItemTitle(row) }}</template>
           </el-table-column>
           <el-table-column prop="sessionName" label="场次" min-width="180" />
           <el-table-column label="场馆" min-width="150">
@@ -376,24 +376,64 @@
       <section v-else-if="activeSection === 'stock-pool'" class="admin-card">
         <div class="table-head">
           <div>
-            <h2>库存池</h2>
-            <p class="section-note">只承接锁票后回收、退票待释放等异常回流库存，不作为日常发布入口。</p>
+            <h2>库存查询</h2>
+            <p class="section-note">查看每个场次、每个票档当前库存。回流记录只表示退票或锁票后的待释放库存，不作为日常发布入口。</p>
           </div>
-          <el-tag type="info">高级维护</el-tag>
+          <div class="head-actions stock-filter-actions">
+            <el-select v-model="stockSessionId" clearable filterable placeholder="选择场次" @change="handleStockSessionChange">
+              <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
+            </el-select>
+            <el-select v-model="stockTicketLevelId" clearable filterable placeholder="选择票档/票价" @change="loadInventory">
+              <el-option v-for="level in stockTicketLevelOptions" :key="level.ticketLevelId" :label="stockTicketLabel(level)" :value="level.ticketLevelId" />
+            </el-select>
+            <el-button type="primary" plain @click="loadInventory">刷新库存</el-button>
+          </div>
         </div>
-        <el-table :data="stockPool" border empty-text="暂无库存">
-          <el-table-column prop="sessionId" label="场次" width="100" />
-          <el-table-column prop="ticketLevelId" label="票档" width="100" />
-          <el-table-column label="来源">
-            <template #default="{ row }">{{ sourceTypeText(row.sourceType) }}</template>
+        <el-table :data="inventoryRows" border empty-text="请选择场次或暂无库存">
+          <el-table-column label="场次" min-width="240">
+            <template #default="{ row }">
+              <div>{{ row.itemTitle }}</div>
+              <small class="muted-text">{{ row.startTime }} {{ row.venueName ? `/ ${row.venueName}` : '' }}</small>
+            </template>
           </el-table-column>
-          <el-table-column label="库存状态">
-            <template #default="{ row }">{{ statusText(row.stockStatus) }}</template>
+          <el-table-column prop="ticketLevelName" label="票档" min-width="140" />
+          <el-table-column prop="price" label="票价" width="90">
+            <template #default="{ row }">￥{{ row.price }}</template>
           </el-table-column>
-          <el-table-column label="可用于下轮" width="140">
-            <template #default="{ row }">{{ row.availableForNextBatch ? '可用' : '不可用' }}</template>
-          </el-table-column>
+          <el-table-column prop="totalStock" label="总库存" width="90" />
+          <el-table-column prop="releasedStock" label="已开放" width="90" />
+          <el-table-column prop="availableStock" label="当前可售" width="100" />
+          <el-table-column prop="lockedStock" label="锁定中" width="90" />
+          <el-table-column prop="soldStock" label="已售" width="90" />
+          <el-table-column prop="unreleasedStock" label="未开放" width="90" />
+          <el-table-column prop="refundedStock" label="已退回" width="90" />
+          <el-table-column prop="waitingPoolStock" label="待释放回流" width="120" />
         </el-table>
+        <div class="stock-pool-subtable">
+          <div class="table-head compact-head">
+            <div>
+              <h3>回流记录</h3>
+              <p class="section-note">这里仅展示退票、锁票回收等待再次释放的库存记录。</p>
+            </div>
+          </div>
+          <el-table :data="filteredStockPool" border empty-text="暂无回流记录">
+            <el-table-column label="场次" min-width="180">
+              <template #default="{ row }">{{ stockSessionLabel(row.sessionId) }}</template>
+            </el-table-column>
+            <el-table-column label="票档" min-width="120">
+              <template #default="{ row }">{{ stockLevelLabel(row.ticketLevelId) }}</template>
+            </el-table-column>
+            <el-table-column label="来源" width="140">
+              <template #default="{ row }">{{ sourceTypeText(row.sourceType) }}</template>
+            </el-table-column>
+            <el-table-column label="库存状态" width="120">
+              <template #default="{ row }">{{ statusText(row.stockStatus) }}</template>
+            </el-table-column>
+            <el-table-column label="可用于下轮" width="120">
+              <template #default="{ row }">{{ row.availableForNextBatch ? '可用' : '不可用' }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
       </section>
 
       <section v-else-if="activeSection === 'refunds'" class="admin-card">
@@ -645,7 +685,14 @@
         <el-form-item label="导演"><el-input v-model="movieForm.director" /></el-form-item>
         <el-form-item label="主演"><el-input v-model="movieForm.actors" /></el-form-item>
         <el-form-item label="评分"><el-input v-model="movieForm.rating" /></el-form-item>
-        <el-form-item label="海报" class="span-2"><el-input v-model="movieForm.poster" placeholder="图片地址" /></el-form-item>
+        <el-form-item label="海报" class="span-2">
+          <div class="upload-row">
+            <img v-if="assetUrl(movieForm.poster)" :src="assetUrl(movieForm.poster)" alt="海报预览" class="poster-preview" />
+            <input type="file" accept="image/*" :disabled="uploadingMoviePoster" @change="setMoviePoster" />
+            <el-input v-model="movieForm.poster" placeholder="也可以直接填写图片地址或 D:\desktop\movie.png" @change="importMoviePosterIfLocal" />
+            <el-button @click="importMoviePoster">导入本机路径</el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="简介" class="span-2"><el-input v-model="movieForm.summary" type="textarea" :rows="3" /></el-form-item>
         <el-form-item label="排片" class="span-2">
           <div class="quick-ticket-editor">
@@ -911,12 +958,15 @@ const ticketLevels = ref([])
 const ticketLevelAreas = ref([])
 const saleBatches = ref([])
 const stockPool = ref([])
+const inventoryRows = ref([])
 const refunds = ref([])
 const checkins = ref([])
 const riskLogs = ref([])
 const statistics = reactive({ orderCount: 0, salesAmount: 0, ticketCount: 0, refundCount: 0, checkinCount: 0, rushSuccessRate: '0%' })
 const ticketCode = ref('')
 const selectedSessionId = ref(null)
+const stockSessionId = ref(null)
+const stockTicketLevelId = ref(null)
 const seatFormAreas = ref([])
 const seatForm = reactive({ venueId: 1, areaId: 1, layoutType: 'STANDARD', rowStart: 1, rowEnd: 3, seatsPerRow: 12, startX: 60, startY: 80, gapX: 30, gapY: 30, aisleAfterSeats: '6' })
 const detailEditorRef = ref(null)
@@ -928,6 +978,7 @@ const richFontSize = ref(16)
 const savedRichRange = ref(null)
 const uploadingPoster = ref(false)
 const uploadingRichImages = ref(false)
+const uploadingMoviePoster = ref(false)
 
 const performanceDialog = ref(false)
 const movieDialog = ref(false)
@@ -962,7 +1013,7 @@ const menus = [
   { key: 'session', title: '场次管理', icon: 'Calendar', path: '/admin/session', roles: ['ADMIN', 'MANAGER'] },
   { key: 'ticket-level', title: '票档票价', icon: 'Tickets', path: '/admin/ticket-level', roles: ['ADMIN', 'MANAGER'] },
   { key: 'sale-batch', title: '开售批次', icon: 'Clock', path: '/admin/sale-batch', roles: ['ADMIN', 'MANAGER'] },
-  { key: 'stock-pool', title: '库存池', icon: 'Box', path: '/admin/stock-pool', roles: ['ADMIN', 'MANAGER'] },
+  { key: 'stock-pool', title: '库存查询', icon: 'Box', path: '/admin/stock-pool', roles: ['ADMIN', 'MANAGER'] },
   { key: 'refunds', title: '退票审核', icon: 'RefreshLeft', path: '/admin/refunds', roles: ['ADMIN', 'MANAGER'] },
   { key: 'checkin', title: '检票管理', icon: 'Checked', path: '/admin/checkin', roles: ['ADMIN', 'MANAGER', 'CHECKER'] },
   { key: 'reports', title: '统计报表', icon: 'TrendCharts', path: '/admin/reports', roles: ['ADMIN', 'MANAGER'] },
@@ -1020,6 +1071,19 @@ const selectedPerformanceVenue = computed(() => venues.value.find((item) => Stri
 const activeHomeSection = computed(() => homepageRecommendations.value.find((item) => item.code === activeHomeSectionCode.value) || homepageRecommendations.value[0])
 const activeHomeCandidates = computed(() => activeHomeSection.value?.candidates || [])
 const selectedHomeItems = computed(() => activeHomeSection.value?.selected || [])
+const filteredStockPool = computed(() => stockPool.value.filter((row) => (
+  (!stockSessionId.value || String(row.sessionId) === String(stockSessionId.value)) &&
+  (!stockTicketLevelId.value || String(row.ticketLevelId) === String(stockTicketLevelId.value))
+)))
+const stockTicketLevelOptions = computed(() => {
+  const seen = new Set()
+  return inventoryRows.value.filter((row) => {
+    const key = String(row.ticketLevelId)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
 const ticketLevelAutoName = computed(() => `${areaName(ticketLevelForm.areaId).replace(/^区域\s*/, '票档')}${Number(ticketLevelForm.price || 0)}`)
 const performanceDateRows = computed(() => (performanceForm.sessionDates || []).map(normalizeDateTime).filter(Boolean).sort())
 const performanceTimePreview = computed(() => {
@@ -1054,9 +1118,24 @@ const quickAreaOptions = computed(() => {
 const clone = (value) => JSON.parse(JSON.stringify(value || {}))
 const sessionById = (id) => sessions.value.find((item) => String(item.id) === String(id))
 const performanceTitle = (id) => performances.value.find((item) => String(item.id) === String(id))?.title || `演出 ${id || ''}`
+const movieTitle = (id) => movies.value.find((item) => String(item.id) === String(id))?.title || `电影 ${id || ''}`
+const sessionItemTitle = (session) => {
+  if (!session) return '未选择项目'
+  if (session.performanceTitle) return session.performanceTitle
+  if (session.movieTitle) return session.movieTitle
+  if (session.performanceId) return performanceTitle(session.performanceId)
+  if (session.movieId) return movieTitle(session.movieId)
+  return '未选择项目'
+}
 const venueName = (id) => venues.value.find((item) => String(item.id) === String(id))?.name || `场馆 ${id || ''}`
 const areaName = (id) => [...areas.value, ...seatFormAreas.value, ...ticketLevelAreas.value].find((item) => String(item.id) === String(id))?.areaName || `区域 ${id || ''}`
-const sessionLabel = (session) => session ? `${performanceTitle(session.performanceId)} / ${session.sessionName}` : '未选择场次'
+const sessionLabel = (session) => session ? `${sessionItemTitle(session)} / ${session.sessionName}` : '未选择场次'
+const stockSessionLabel = (id) => {
+  const session = sessionById(id)
+  return session ? sessionLabel(session) : `场次 ${id || ''}`
+}
+const stockLevelLabel = (id) => inventoryRows.value.find((item) => String(item.ticketLevelId) === String(id))?.ticketLevelName || `票档 ${id || ''}`
+const stockTicketLabel = (row) => `${row.ticketLevelName || `票档 ${row.ticketLevelId}`} ￥${row.price}`
 
 async function loadAll() {
   if (user.canUseAdminApi) {
@@ -1082,8 +1161,9 @@ async function loadAll() {
     saleBatches.value = batchRows
     stockPool.value = poolRows
     if (!selectedSessionId.value && sessions.value.length) selectedSessionId.value = sessions.value[0].id
+    if (!stockSessionId.value && sessions.value.length) stockSessionId.value = sessions.value[0].id
     if (!seatForm.venueId && seatVenueOptions.value.length) seatForm.venueId = seatVenueOptions.value[0].id
-    await Promise.all([loadTicketLevels(), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
+    await Promise.all([loadTicketLevels(), loadInventory(), loadAreasForRoute(), loadVenueSeatsForRoute(), loadAreasForSeatForm()])
   }
   if (user.canUseChecker) Object.assign(checkerMetrics, await http.get('/api/checker/dashboard'))
   await loadOperations()
@@ -1132,6 +1212,23 @@ async function loadTicketLevels() {
   ticketLevels.value = await adminApi.ticketLevels(selectedSessionId.value)
   const session = sessionById(selectedSessionId.value)
   ticketLevelAreas.value = session?.venueId ? await adminApi.areas(session.venueId) : []
+}
+
+async function loadInventory() {
+  if (!user.canUseAdminApi) return
+  const params = {}
+  if (stockSessionId.value) params.sessionId = stockSessionId.value
+  if (stockTicketLevelId.value) params.ticketLevelId = stockTicketLevelId.value
+  inventoryRows.value = await adminApi.inventory(params)
+  stockPool.value = stockSessionId.value ? await adminApi.sessionStockPool(stockSessionId.value) : await adminApi.stockPool()
+  if (stockTicketLevelId.value && !inventoryRows.value.some((row) => String(row.ticketLevelId) === String(stockTicketLevelId.value))) {
+    stockTicketLevelId.value = null
+  }
+}
+
+async function handleStockSessionChange() {
+  stockTicketLevelId.value = null
+  await loadInventory()
 }
 
 function emptyPerformance() {
@@ -1346,6 +1443,17 @@ async function setPerformancePoster(event) {
   }
 }
 
+async function setMoviePoster(event) {
+  uploadingMoviePoster.value = true
+  try {
+    await uploadSelectedImage(event, (value) => {
+      movieForm.poster = value
+    })
+  } finally {
+    uploadingMoviePoster.value = false
+  }
+}
+
 function setBlockImage(index, event) {
   uploadSelectedImage(event, (value) => {
     performanceForm.detailBlocks[index].content = value
@@ -1373,6 +1481,21 @@ function looksLikeLocalImagePath(path) {
 async function importPerformancePosterIfLocal() {
   if (!looksLikeLocalImagePath(performanceForm.poster)) return
   await importPerformancePoster()
+}
+
+async function importMoviePoster() {
+  if (!movieForm.poster) {
+    ElMessage.warning('请先填写本机图片路径')
+    return
+  }
+  const result = await adminApi.uploadLocalImage(movieForm.poster)
+  movieForm.poster = result.path
+  ElMessage.success('电影海报已导入 uploads')
+}
+
+async function importMoviePosterIfLocal() {
+  if (!looksLikeLocalImagePath(movieForm.poster)) return
+  await importMoviePoster()
 }
 
 async function importBlockImage(index) {
@@ -1634,6 +1757,7 @@ function removeMovieSession(index) {
 }
 
 async function saveMovie() {
+  await importMoviePosterIfLocal()
   const payload = clone(movieForm)
   payload.sessions = payload.sessions.map((session) => {
     const cinema = cinemas.value.find((item) => String(item.id) === String(session.cinemaId))
