@@ -9,10 +9,11 @@
     </section>
     <section v-else class="flow-status">
       <div class="failure-card">
-        <h1>不要气馁，请继续尝试</h1>
-        <p>当前票源紧张，你可以继续尝试或选择其他票档。</p>
+        <h1>{{ failureTitle }}</h1>
+        <p>{{ failureDescription }}</p>
         <div class="action-row">
-          <el-button type="primary" @click="retry">继续尝试</el-button>
+          <el-button v-if="!duplicate" type="primary" @click="retry">继续尝试</el-button>
+          <el-button v-else type="primary" @click="router.push('/orders')">查看订单</el-button>
           <el-button @click="backToPurchase">返回购票</el-button>
         </div>
       </div>
@@ -29,15 +30,23 @@ const route = useRoute()
 const router = useRouter()
 const result = ref(null)
 const success = computed(() => result.value?.status === 'SUCCESS')
+const duplicate = computed(() => result.value?.status === 'DUPLICATE')
 const statusText = computed(() => ({
   SUCCESS: '请在 5 分钟内完成支付',
   SOLD_OUT: '本轮票源已售罄',
   LOCKED: '当前场次暂不可售',
-  DUPLICATE: '检测到重复提交，请查看已有订单',
+  DUPLICATE: '同一场次您已有票，请勿重复购票',
   NOT_STARTED: '本轮售票尚未开始',
   LIMITED: '已超出限购规则',
   NO_AUTH: '请先完成实名认证'
 }[result.value?.status] || '当前网络不稳定，请稍后查询抢票结果'))
+const failureTitle = computed(() => duplicate.value ? '同一场次您已有票，请勿重复购票' : '不要气馁，请继续尝试')
+const failureDescription = computed(() => {
+  if (duplicate.value) {
+    return result.value?.message || '已存在同一观演人的有效订单，请查看当前订单。'
+  }
+  return '当前票源紧张，你可以继续尝试或选择其他票档。'
+})
 const retry = () => {
   const performanceId = result.value?.performanceId
   router.push(performanceId ? `/performance/${performanceId}/purchase?sessionId=${result.value.sessionId}` : '/search')

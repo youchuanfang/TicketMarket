@@ -176,8 +176,8 @@ public class Phase4TicketFlowService {
         } else {
             viewerIds = List.of();
         }
-        if (hasDuplicateSuccess(userId, sessionId)) {
-            return failedRush(userId, payload, "DUPLICATE", "检测到重复提交，请查看当前订单");
+        if (movieSession ? hasDuplicateSuccess(userId, sessionId) : hasDuplicateViewerSuccess(sessionId, viewerIds)) {
+            return failedRush(userId, payload, "DUPLICATE", "同一场次您已有票，请勿重复购票");
         }
 
         Long batchId = (Long) batch.get("id");
@@ -1083,7 +1083,22 @@ public class Phase4TicketFlowService {
         return orders.values().stream()
                 .filter(item -> Objects.equals(item.get("userId"), userId))
                 .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
-                .anyMatch(item -> List.of("PENDING_PAYMENT", "PAID", "TICKET_ISSUED").contains(item.get("status")));
+                .anyMatch(this::isActiveOrder);
+    }
+
+    private boolean hasDuplicateViewerSuccess(Long sessionId, List<Long> viewerIds) {
+        if (viewerIds.isEmpty()) {
+            return false;
+        }
+        return orders.values().stream()
+                .filter(item -> Objects.equals(item.get("sessionId"), sessionId))
+                .filter(this::isActiveOrder)
+                .map(item -> longList(item.get("viewerIds")))
+                .anyMatch(existingViewerIds -> existingViewerIds.stream().anyMatch(viewerIds::contains));
+    }
+
+    private boolean isActiveOrder(Map<String, Object> order) {
+        return List.of("PENDING_PAYMENT", "PAID", "TICKET_ISSUED").contains(order.get("status"));
     }
 
     private Map<String, Object> resolveBatch(Long sessionId, Long requestedBatchId) {
