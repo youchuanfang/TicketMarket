@@ -798,8 +798,9 @@ public class Phase3ResourceService {
         List<Map<String, Object>> rows = rows("""
                 select ps.id sessionId,
                        ps.performance_id performanceId,
-                       coalesce(p.title, ps.session_name, ps.hall_name) itemTitle,
-                       coalesce(ps.session_name, ps.hall_name) sessionName,
+                       coalesce(p.title, '未命名演出') performanceTitle,
+                       coalesce(p.title, '未命名演出') itemTitle,
+                       coalesce(ps.session_name, date_format(ps.start_time, '%Y-%m-%d %H:%i:%s')) sessionName,
                        date_format(ps.start_time, '%Y-%m-%d %H:%i:%s') startTime,
                        v.name venueName,
                        tl.id ticketLevelId, tl.name ticketLevelName, tl.price,
@@ -815,7 +816,7 @@ public class Phase3ResourceService {
                 left join venue v on v.id=ps.venue_id
                 left join stock_pool sp on sp.ticket_level_id=tl.id and sp.session_id=ps.id
                 """ + where + """
-                group by ps.id, ps.performance_id, p.title, ps.session_name, ps.hall_name, ps.start_time, v.name,
+                group by ps.id, ps.performance_id, p.title, ps.session_name, ps.start_time, v.name,
                          tl.id, tl.name, tl.price, tl.total_stock, tl.released_stock, tl.unreleased_stock,
                          tl.sold_stock, tl.locked_stock, tl.refunded_stock, tl.status
                 order by ps.start_time desc, ps.id desc, tl.price, tl.id

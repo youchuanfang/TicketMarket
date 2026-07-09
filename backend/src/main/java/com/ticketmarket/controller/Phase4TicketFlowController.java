@@ -102,6 +102,11 @@ public class Phase4TicketFlowController {
         return Result.ok(service.ticket(id, currentUserId()));
     }
 
+    @GetMapping("/api/user/tickets/{id}/dynamic-code")
+    public Result<Map<String, Object>> ticketDynamicCode(@PathVariable Long id) {
+        return Result.ok(service.ticketDynamicCode(id, currentUserId()));
+    }
+
     @GetMapping("/api/admin/orders")
     public Result<List<Map<String, Object>>> adminOrders() {
         return Result.ok(service.adminOrders());
