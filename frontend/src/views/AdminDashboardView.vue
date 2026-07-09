@@ -809,7 +809,10 @@
         <el-input-number v-model="cinemaScheduleForm.price" :min="1" />
         <el-button type="primary" @click="saveCinemaSchedule">新增排片</el-button>
       </div>
-      <div v-if="cinemaScheduleSeats.length" class="cinema-seat-preview">
+      <div v-if="activeCinemaSeatSchedule" class="cinema-seat-preview">
+        <div class="cinema-seat-preview-title">
+          {{ activeCinemaSeatSchedule.movieTitle }} · {{ activeCinemaSeatSchedule.hallName }} · {{ activeCinemaSeatSchedule.startTime }}
+        </div>
         <SeatSvg :seats="cinemaScheduleSeats" :venue="activeCinema || {}" />
       </div>
     </el-dialog>
@@ -1040,6 +1043,7 @@ const inventoryRows = ref([])
 const stockInventoryOptions = ref([])
 const cinemaSchedules = ref([])
 const cinemaScheduleSeats = ref([])
+const activeCinemaSeatSchedule = ref(null)
 const refunds = ref([])
 const checkins = ref([])
 const riskLogs = ref([])
@@ -1170,7 +1174,7 @@ const stockPerformanceOptions = computed(() => {
     if (!row.performanceId || seen.has(key)) return false
     seen.add(key)
     return true
-  }).map((row) => ({ id: row.performanceId, title: row.itemTitle }))
+  }).map((row) => ({ id: row.performanceId, title: row.performanceTitle || row.itemTitle }))
 })
 const stockSessionOptions = computed(() => {
   const seen = new Set()
@@ -1183,6 +1187,7 @@ const stockSessionOptions = computed(() => {
   }).map((row) => ({
     id: row.sessionId,
     itemTitle: row.itemTitle,
+    performanceTitle: row.performanceTitle,
     sessionName: row.sessionName,
     startTime: row.startTime
   }))
@@ -1251,7 +1256,10 @@ const stockSessionLabel = (id) => {
 }
 const stockLevelLabel = (id) => inventoryRows.value.find((item) => String(item.ticketLevelId) === String(id))?.ticketLevelName || `票档 ${id || ''}`
 const stockTicketLabel = (row) => `${row.ticketLevelName || `票档 ${row.ticketLevelId}`} ￥${row.price}`
-const stockOptionSessionLabel = (session) => `${session.itemTitle || '未命名项目'} / ${session.sessionName || session.startTime || '未命名场次'}`
+const stockOptionSessionLabel = (session) => {
+  const time = session.startTime ? ` ${session.startTime}` : ''
+  return `${session.sessionName || '未命名场次'}${time}`
+}
 
 async function loadAll() {
   if (user.canUseAdminApi) {
@@ -1919,6 +1927,12 @@ async function saveMovie() {
   ElMessage.success('电影已保存')
   movieDialog.value = false
   await loadAll()
+  if (activeCinema.value?.id) {
+    activeCinema.value = cinemas.value.find((item) => String(item.id) === String(activeCinema.value.id)) || activeCinema.value
+    if (cinemaScheduleDialog.value) {
+      cinemaSchedules.value = await adminApi.cinemaSchedules(activeCinema.value.id)
+    }
+  }
 }
 
 async function deleteMovie(row) {
@@ -2003,25 +2017,36 @@ async function saveCinema() {
 }
 
 async function openCinemaSchedules(row) {
-  activeCinema.value = row
+  const freshCinemas = await adminApi.cinemas()
+  cinemas.value = freshCinemas
+  activeCinema.value = freshCinemas.find((item) => String(item.id) === String(row.id)) || row
   cinemaScheduleDialog.value = true
   cinemaScheduleSeats.value = []
+  activeCinemaSeatSchedule.value = null
   resetReactive(cinemaScheduleForm, emptyCinemaSchedule())
-  cinemaScheduleForm.hallName = row.halls?.[0]?.name || ''
+  cinemaScheduleForm.hallName = activeCinema.value.halls?.[0]?.name || ''
   cinemaScheduleForm.movieId = movies.value[0]?.id || null
-  cinemaSchedules.value = await adminApi.cinemaSchedules(row.id)
+  cinemaSchedules.value = await adminApi.cinemaSchedules(activeCinema.value.id)
 }
 
 async function saveCinemaSchedule() {
   if (!activeCinema.value) return
+  if (!cinemaScheduleForm.movieId || !cinemaScheduleForm.hallName || !cinemaScheduleForm.startTime) {
+    ElMessage.warning('请选择电影、影厅和放映时间')
+    return
+  }
   await adminApi.saveCinemaSchedule(activeCinema.value.id, cinemaScheduleForm)
   ElMessage.success('排片已保存')
   cinemaSchedules.value = await adminApi.cinemaSchedules(activeCinema.value.id)
+  activeCinemaSeatSchedule.value = null
+  cinemaScheduleSeats.value = []
   resetReactive(cinemaScheduleForm, { ...emptyCinemaSchedule(), movieId: cinemaScheduleForm.movieId, hallName: cinemaScheduleForm.hallName })
   await loadAll()
+  activeCinema.value = cinemas.value.find((item) => String(item.id) === String(activeCinema.value.id)) || activeCinema.value
 }
 
 async function viewCinemaScheduleSeats(row) {
+  activeCinemaSeatSchedule.value = row
   cinemaScheduleSeats.value = await adminApi.sessionSeats(row.sessionId)
 }
 
@@ -2540,10 +2565,16 @@ onBeforeUnmount(() => {
 
 .cinema-schedule-form {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1.5fr 120px auto;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(120px, .8fr) minmax(220px, 1.2fr) minmax(150px, .6fr) minmax(110px, auto);
   gap: 10px;
   align-items: center;
   margin-top: 14px;
+}
+
+.cinema-schedule-form :deep(.el-input-number),
+.cinema-schedule-form :deep(.el-date-editor),
+.cinema-schedule-form .el-button {
+  width: 100%;
 }
 
 .cinema-seat-preview {
@@ -2551,6 +2582,12 @@ onBeforeUnmount(() => {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 12px;
+}
+
+.cinema-seat-preview-title {
+  margin-bottom: 10px;
+  color: #374151;
+  font-weight: 700;
 }
 
 .stock-filter-actions {

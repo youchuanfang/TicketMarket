@@ -34,7 +34,7 @@ import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import PerformanceCard from '../components/PerformanceCard.vue'
 import SectionHeader from '../components/SectionHeader.vue'
-import { getCategories, getMovies, searchPerformances } from '../api/portal'
+import { getCategories, getHome, getMovies, searchPerformances } from '../api/portal'
 
 defineProps({ cityMode: Boolean })
 
@@ -52,23 +52,35 @@ const currentTitle = computed(() => {
   return categories.value.find((item) => item.code === code)?.name || '全部分类'
 })
 
+const normalizeMovies = (movies) => movies.map((movie) => ({
+  ...movie,
+  targetType: 'MOVIE',
+  targetId: movie.id,
+  categoryName: '电影',
+  categoryCode: 'movie',
+  title: movie.title,
+  city: movie.sessions?.[0]?.city || movie.city || '',
+  venue: movie.sessions?.[0]?.cinemaName || movie.venue || movie.venueName || '',
+  venueName: movie.sessions?.[0]?.cinemaName || movie.venueName || movie.venue || '',
+  startTime: movie.sessions?.[0]?.startTime || movie.startTime || movie.releaseDate,
+  priceMin: movie.sessions?.[0]?.price || movie.priceMin || movie.minPrice || 0,
+  minPrice: movie.sessions?.[0]?.price || movie.minPrice || movie.priceMin || 0,
+  saleStatus: movie.sessions?.length ? 'ON_SALE' : (movie.saleStatus || 'COMING_SOON')
+}))
+
+const loadMovieItems = async () => {
+  try {
+    return normalizeMovies(await getMovies())
+  } catch (error) {
+    const home = await getHome()
+    return normalizeMovies(home.movies || [])
+  }
+}
+
 const load = async () => {
   try {
     if (route.params.code === 'movie') {
-      const movies = await getMovies()
-      const normalized = movies.map((movie) => ({
-        ...movie,
-        targetType: 'MOVIE',
-        targetId: movie.id,
-        categoryName: '电影',
-        categoryCode: 'movie',
-        title: movie.title,
-        city: movie.sessions?.[0]?.city || '',
-        venueName: movie.sessions?.[0]?.cinemaName || '',
-        startTime: movie.sessions?.[0]?.startTime || movie.releaseDate,
-        minPrice: movie.sessions?.[0]?.price || 0,
-        saleStatus: movie.sessions?.length ? 'ON_SALE' : 'COMING_SOON'
-      }))
+      const normalized = await loadMovieItems()
       items.value = normalized.filter((movie) => (
         (!city.value || movie.city === city.value) &&
         (!status.value || movie.saleStatus === status.value)
@@ -80,6 +92,7 @@ const load = async () => {
     items.value = data.items
     cities.value = data.filters?.cities || []
   } catch (error) {
+    items.value = []
     ElMessage.error(error.message)
   }
 }
