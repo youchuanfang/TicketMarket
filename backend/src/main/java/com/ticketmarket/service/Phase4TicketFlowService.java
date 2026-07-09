@@ -10,10 +10,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,11 +24,17 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 @Service
 @DependsOn("databaseSchemaInitializer")
 public class Phase4TicketFlowService {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String DYNAMIC_CODE_PREFIX = "TM-DYN";
+    private static final long DYNAMIC_CODE_TTL_SECONDS = 60;
+    private static final long DYNAMIC_CODE_GRACE_SECONDS = 30;
+    private static final String DYNAMIC_CODE_SECRET = "TicketMarket-Dynamic-Ticket-Code-v1";
 
     private final DemoDataService demoDataService;
     private final Phase3ResourceService resourceService;
@@ -453,12 +462,12 @@ public class Phase4TicketFlowService {
     public List<Map<String, Object>> userTickets(Long userId) {
         return tickets.values().stream()
                 .filter(item -> Objects.equals(item.get("userId"), userId))
-                .map(this::copy)
+                .map(this::displayTicket)
                 .toList();
     }
 
     public List<Map<String, Object>> adminTickets() {
-        return tickets.values().stream().map(this::copy).toList();
+        return tickets.values().stream().map(this::displayTicket).toList();
     }
 
     public Map<String, Object> ticket(Long id, Long userId) {
@@ -469,7 +478,22 @@ public class Phase4TicketFlowService {
         if (userId != null && !Objects.equals(ticket.get("userId"), userId)) {
             throw new ApiException(403, "无权限查看该电子票");
         }
-        return copy(ticket);
+        return displayTicket(ticket);
+    }
+
+    public Map<String, Object> ticketDynamicCode(Long id, Long userId) {
+        Map<String, Object> ticket = tickets.get(id);
+        if (ticket == null) {
+            throw new ApiException(404, "电子票不存在");
+        }
+        if (userId != null && !Objects.equals(ticket.get("userId"), userId)) {
+            throw new ApiException(403, "无权限查看该电子票");
+        }
+        Map<String, Object> row = displayTicket(ticket);
+        row.put("dynamicCode", dynamicCode(ticket));
+        row.put("dynamicCodeTtlSeconds", DYNAMIC_CODE_TTL_SECONDS);
+        row.put("dynamicCodeExpireAt", FORMATTER.format(LocalDateTime.now().plusSeconds(DYNAMIC_CODE_TTL_SECONDS)));
+        return row;
     }
 
     public synchronized Map<String, Object> applyRefund(Long orderIdValue, Long userId) {
@@ -590,19 +614,16 @@ public class Phase4TicketFlowService {
 
     public synchronized Map<String, Object> verifyTicket(Map<String, Object> payload, Long checkerId) {
         String code = str(payload, "ticketNo", str(payload, "qrCodeContent", ""));
-        Map<String, Object> ticket = tickets.values().stream()
-                .filter(item -> Objects.equals(item.get("ticketNo"), code) || Objects.equals(item.get("qrCodeContent"), code))
-                .findFirst()
-                .orElse(null);
+        Map<String, Object> ticket = resolveTicketCode(code);
         if (ticket == null) {
             risk("检票", "无效票据：" + code, checkerId);
             return checkinResult(code, "INVALID", "无效票");
         }
         if ("REFUNDED".equals(ticket.get("status")) || "INVALID".equals(ticket.get("status"))) {
-            return checkinResult(code, "INVALID", "票据已失效");
+            return checkinResult(code, "INVALID", "票据已失效", ticket);
         }
         if ("CHECKED_IN".equals(ticket.get("status"))) {
-            return checkinResult(code, "DUPLICATE", "重复入场");
+            return checkinResult(code, "DUPLICATE", "重复入场", ticket);
         }
         ticket.put("status", "CHECKED_IN");
         updateTicket(ticket);
@@ -625,11 +646,11 @@ public class Phase4TicketFlowService {
         persistCheckin(record);
         addMessage((Long) ticket.get("userId"), "电子票已核验", "票号 " + ticket.get("ticketNo") + " 已完成入场核验。");
         log("检票", "核验成功，票号：" + ticket.get("ticketNo"), checkerId);
-        return copy(record);
+        return displayCheckin(record);
     }
 
     public List<Map<String, Object>> checkins() {
-        return checkins.values().stream().map(this::copy).toList();
+        return checkins.values().stream().map(this::displayCheckin).toList();
     }
 
     public List<Map<String, Object>> userMessages(Long userId) {
@@ -757,6 +778,19 @@ public class Phase4TicketFlowService {
         );
         checkins.put((Long) record.get("id"), record);
         return copy(record);
+    }
+
+    private Map<String, Object> checkinResult(String code, String result, String message, Map<String, Object> ticket) {
+        Map<String, Object> record = map(
+                "id", checkinId.incrementAndGet(),
+                "ticketId", ticket.get("id"),
+                "ticketNo", ticket.get("ticketNo"),
+                "result", result,
+                "message", message,
+                "createdAt", now()
+        );
+        checkins.put((Long) record.get("id"), record);
+        return displayCheckin(record);
     }
 
     private void addMessage(Long userId, String title, String content) {
@@ -1161,6 +1195,169 @@ public class Phase4TicketFlowService {
             row.put("order", safeDisplayOrder(orders.get(orderIdValue)));
         }
         return row;
+    }
+
+    private Map<String, Object> displayTicket(Map<String, Object> ticket) {
+        Map<String, Object> row = copy(ticket);
+        Long orderIdValue = longValue(row, "orderId", null);
+        Map<String, Object> order = orderIdValue == null ? null : orders.get(orderIdValue);
+        if (order != null) {
+            Map<String, Object> displayOrder = safeDisplayOrder(order);
+            row.put("orderNo", displayOrder.get("orderNo"));
+            row.put("itemTitle", displayOrder.get("itemTitle"));
+            row.put("poster", displayOrder.get("poster"));
+            row.put("sessionName", displayOrder.get("sessionName"));
+            row.put("sessionTime", displayOrder.get("sessionTime"));
+            row.put("venueName", displayOrder.get("venueName"));
+            row.put("cityName", displayOrder.get("cityName"));
+            row.put("ticketLevelName", displayOrder.get("ticketLevelName"));
+            row.put("unitPrice", displayOrder.get("unitPrice"));
+            row.put("itemType", displayOrder.get("itemType"));
+            row.put("itemId", displayOrder.get("itemId"));
+        } else {
+            enrichTicketFromSession(row);
+        }
+        enrichTicketViewer(row);
+        row.putIfAbsent("itemTitle", row.getOrDefault("ticketNo", "电子票"));
+        row.putIfAbsent("poster", "");
+        row.putIfAbsent("sessionName", "场次待确认");
+        return row;
+    }
+
+    private void enrichTicketFromSession(Map<String, Object> row) {
+        Long sessionId = longValue(row, "sessionId", null);
+        Long ticketLevelId = longValue(row, "ticketLevelId", null);
+        if (sessionId == null) {
+            return;
+        }
+        try {
+            Map<String, Object> info = jdbcTemplate.queryForMap("""
+                    select ps.id sessionId, date_format(ps.start_time, '%Y-%m-%d %H:%i:%s') sessionTime,
+                           coalesce(ps.session_name, ps.hall_name) sessionName,
+                           v.name venueName, v.city_name cityName,
+                           coalesce(p.title, m.title, ps.session_name, ps.hall_name, tl.name) itemTitle,
+                           coalesce(p.poster_path, m.poster_path, '') poster,
+                           tl.name ticketLevelName, tl.price unitPrice,
+                           case when ps.movie_id is null then 'PERFORMANCE' else 'MOVIE' end itemType,
+                           coalesce(ps.performance_id, ps.movie_id) itemId
+                    from performance_session ps
+                    left join performance p on p.id=ps.performance_id
+                    left join movie m on m.id=ps.movie_id
+                    left join venue v on v.id=ps.venue_id
+                    left join ticket_level tl on tl.session_id=ps.id and tl.id=?
+                    where ps.id=?
+                    """, ticketLevelId, sessionId);
+            row.putAll(info);
+        } catch (Exception ignored) {
+            row.putIfAbsent("itemTitle", row.getOrDefault("ticketNo", "电子票"));
+        }
+    }
+
+    private void enrichTicketViewer(Map<String, Object> row) {
+        Long userIdValue = longValue(row, "userId", null);
+        Long viewerIdValue = longValue(row, "viewerId", null);
+        if (userIdValue == null || viewerIdValue == null) {
+            row.putIfAbsent("viewerName", "无需观演人");
+            return;
+        }
+        demoDataService.listViewers(userIdValue).stream()
+                .filter(viewer -> Objects.equals(viewer.getId(), viewerIdValue))
+                .findFirst()
+                .ifPresentOrElse(viewer -> {
+                    row.put("viewerName", viewer.getName());
+                    row.put("viewerIdCardMasked", viewer.getIdCardMasked());
+                    row.put("viewerPhoneMasked", viewer.getPhoneMasked());
+                }, () -> row.putIfAbsent("viewerName", "观演人待确认"));
+    }
+
+    private Map<String, Object> displayCheckin(Map<String, Object> record) {
+        Map<String, Object> row = copy(record);
+        Map<String, Object> ticket = null;
+        Long ticketIdValue = longValue(row, "ticketId", null);
+        if (ticketIdValue != null) {
+            ticket = tickets.get(ticketIdValue);
+        }
+        if (ticket == null) {
+            String ticketNo = String.valueOf(row.getOrDefault("ticketNo", ""));
+            ticket = tickets.values().stream()
+                    .filter(item -> Objects.equals(item.get("ticketNo"), ticketNo) || Objects.equals(item.get("qrCodeContent"), ticketNo))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (ticket != null) {
+            Map<String, Object> displayTicket = displayTicket(ticket);
+            row.put("ticket", displayTicket);
+            row.put("ticketNo", displayTicket.get("ticketNo"));
+            row.put("itemTitle", displayTicket.get("itemTitle"));
+            row.put("poster", displayTicket.get("poster"));
+            row.put("sessionTime", displayTicket.get("sessionTime"));
+            row.put("sessionName", displayTicket.get("sessionName"));
+            row.put("ticketLevelName", displayTicket.get("ticketLevelName"));
+            row.put("viewerName", displayTicket.get("viewerName"));
+            row.put("viewerIdCardMasked", displayTicket.get("viewerIdCardMasked"));
+        }
+        return row;
+    }
+
+    private String dynamicCode(Map<String, Object> ticket) {
+        long issuedAt = System.currentTimeMillis() / 1000;
+        String nonce = UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
+        return DYNAMIC_CODE_PREFIX + ":" + ticket.get("id") + ":" + issuedAt + ":" + nonce + ":" + dynamicSignature(ticket, issuedAt, nonce);
+    }
+
+    private Map<String, Object> resolveTicketCode(String code) {
+        if (code == null || code.isBlank()) {
+            return null;
+        }
+        String normalized = code.trim();
+        if (normalized.startsWith(DYNAMIC_CODE_PREFIX + ":")) {
+            return resolveDynamicCode(normalized);
+        }
+        return tickets.values().stream()
+                .filter(item -> Objects.equals(item.get("ticketNo"), normalized) || Objects.equals(item.get("qrCodeContent"), normalized))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Map<String, Object> resolveDynamicCode(String code) {
+        String[] parts = code.split(":");
+        if (parts.length != 5 || !DYNAMIC_CODE_PREFIX.equals(parts[0])) {
+            return null;
+        }
+        try {
+            Long ticketIdValue = Long.valueOf(parts[1]);
+            long issuedAt = Long.parseLong(parts[2]);
+            String nonce = parts[3];
+            String signature = parts[4];
+            long nowEpoch = System.currentTimeMillis() / 1000;
+            if (issuedAt > nowEpoch + 5 || nowEpoch - issuedAt > DYNAMIC_CODE_TTL_SECONDS + DYNAMIC_CODE_GRACE_SECONDS) {
+                return null;
+            }
+            Map<String, Object> ticket = tickets.get(ticketIdValue);
+            if (ticket == null) {
+                return null;
+            }
+            String expected = dynamicSignature(ticket, issuedAt, nonce);
+            if (!MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8))) {
+                return null;
+            }
+            return ticket;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String dynamicSignature(Map<String, Object> ticket, long issuedAt, String nonce) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(DYNAMIC_CODE_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            String payload = ticket.get("id") + "|" + ticket.get("ticketNo") + "|" + ticket.get("userId") + "|"
+                    + ticket.get("viewerId") + "|" + ticket.get("sessionId") + "|" + issuedAt + "|" + nonce;
+            byte[] digest = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (Exception ex) {
+            throw new ApiException(500, "动态入场码生成失败");
+        }
     }
 
     private Map<String, Object> safeDisplayOrder(Map<String, Object> order) {

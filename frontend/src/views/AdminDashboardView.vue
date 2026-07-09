@@ -520,9 +520,32 @@
             <el-input v-model="ticketCode" placeholder="输入票号或入场码" />
             <el-button type="primary" @click="verify">核验</el-button>
           </div>
+          <div v-if="latestCheckin?.ticket" class="checkin-result-card">
+            <img v-if="assetUrl(latestCheckin.poster)" :src="assetUrl(latestCheckin.poster)" :alt="latestCheckin.itemTitle" />
+            <div v-else class="checkin-result-poster">暂无海报</div>
+            <div>
+              <strong>{{ latestCheckin.itemTitle }}</strong>
+              <p>{{ latestCheckin.sessionTime }} {{ latestCheckin.sessionName ? `/ ${latestCheckin.sessionName}` : '' }}</p>
+              <p>{{ latestCheckin.ticketLevelName }} · {{ latestCheckin.viewerName || '无需观演人' }}</p>
+              <p v-if="latestCheckin.viewerIdCardMasked">证件：{{ latestCheckin.viewerIdCardMasked }}</p>
+              <el-tag :type="latestCheckin.result === 'SUCCESS' ? 'success' : 'danger'">{{ latestCheckin.message }}</el-tag>
+            </div>
+          </div>
           <el-table :data="checkins" border empty-text="暂无核验">
-            <el-table-column prop="ticketNo" label="票号" />
-            <el-table-column prop="message" label="核验结果" />
+            <el-table-column label="票据" min-width="320">
+              <template #default="{ row }">
+                <div class="admin-order-cell">
+                  <img v-if="assetUrl(row.poster)" :src="assetUrl(row.poster)" :alt="row.itemTitle" />
+                  <div>
+                    <strong>{{ row.itemTitle || row.ticketNo }}</strong>
+                    <small>{{ row.sessionTime || '场次待确认' }}</small>
+                    <small>{{ row.ticketLevelName }} {{ row.viewerName ? `/ ${row.viewerName}` : '' }}</small>
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="ticketNo" label="票号" width="160" />
+            <el-table-column prop="message" label="核验结果" width="120" />
             <el-table-column prop="createdAt" label="时间" width="180" />
           </el-table>
         </section>
@@ -1046,6 +1069,7 @@ const cinemaScheduleSeats = ref([])
 const activeCinemaSeatSchedule = ref(null)
 const refunds = ref([])
 const checkins = ref([])
+const latestCheckin = ref(null)
 const riskLogs = ref([])
 const statistics = reactive({ orderCount: 0, salesAmount: 0, ticketCount: 0, refundCount: 0, checkinCount: 0, rushSuccessRate: '0%' })
 const ticketCode = ref('')
@@ -2507,6 +2531,7 @@ async function verify() {
     return
   }
   const result = await verifyTicket({ ticketNo: ticketCode.value })
+  latestCheckin.value = result
   ElMessage.success(result.message)
   ticketCode.value = ''
   await loadOperations()
@@ -2561,6 +2586,44 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.checkin-result-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.checkin-result-card img,
+.checkin-result-poster {
+  width: 58px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f3f4f6;
+  flex: 0 0 auto;
+}
+
+.checkin-result-poster {
+  display: grid;
+  place-items: center;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.checkin-result-card strong,
+.checkin-result-card p {
+  display: block;
+  margin: 0 0 5px;
+}
+
+.checkin-result-card p {
+  color: #475569;
 }
 
 .cinema-schedule-form {
